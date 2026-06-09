@@ -26,7 +26,7 @@ app.use(cors({
       'http://localhost:3000',
       'http://127.0.0.1',
       'capacitor://localhost',
-      'https://quinieladeportivadb.onrender.com'
+      'https://quinieladeportivamundialista.onrender.com'
     ];
 
     if (allowedOrigins.includes(origin)) {
