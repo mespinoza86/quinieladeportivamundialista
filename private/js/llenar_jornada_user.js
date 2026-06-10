@@ -12,8 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Seleccionamos la última jornada
-            ultimaJornada = data[data.length - 1].nombre;
-            fechaCierreGlobal = data[data.length - 1].fechaCierre;
+            ultimaJornada = data[data.length - 2].nombre;
+            fechaCierreGlobal = data[data.length - 2].fechaCierre;
             loadPartidos(ultimaJornada);
         })
         .catch(error => console.error('Error al cargar las jornadas:', error));

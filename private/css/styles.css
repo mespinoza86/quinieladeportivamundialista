@@ -1186,3 +1186,69 @@ button + button {
   color: #d7dde7;
   font-size: 0.9rem;
 }
+
+.menu-card {
+  display: block;
+  text-decoration: none;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  margin: 12px;
+  text-align: center;
+  color: #222;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.menu-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+}
+
+.menu-icon {
+  font-size: 42px;
+  margin-bottom: 10px;
+}
+
+.menu-title {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.menu-description {
+  font-size: 14px;
+  color: #555;
+}
+
+/**//**//**/
+
+ .table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.campeon-table {
+  min-width: 100%;
+  table-layout: fixed;
+}
+
+.campeon-table th,
+.campeon-table td {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.campeon-table th:first-child,
+.campeon-table td:first-child {
+  width: 35%;
+}
+
+.campeon-table th:last-child,
+.campeon-table td:last-child {
+  width: 65%;
+}
+
+.campeon-table td {
+  font-size: 14px;
+}
