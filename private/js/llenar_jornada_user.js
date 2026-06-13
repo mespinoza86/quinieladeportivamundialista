@@ -1,6 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     let ultimaJornada = null;
     let fechaCierreGlobal = null;
+    let jugadorValidado = null;
+
 
     // Cargar jornadas
     fetch('/api/jornadas')
@@ -34,10 +36,61 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Botones
     document.getElementById('copiarTextoButton').addEventListener('click', copiarResultados);
-    document.getElementById('enviarWhatsappButton').addEventListener('click', enviarPorWhatsapp);
+    document.getElementById('enviarWhatsappButton').addEventListener('click', enviarPorWhatsapp);    
+
     document.getElementById('guardarResultadosButton').addEventListener('click', () => {
-        guardarResultados(ultimaJornada, fechaCierreGlobal);
+         guardarResultados(ultimaJornada, fechaCierreGlobal, jugadorValidado);
     });
+
+    document.getElementById('comboJugadores').addEventListener('change', async () => {
+        const combo = document.getElementById('comboJugadores');
+        const jugador = combo.value;
+
+        jugadorValidado = null;
+        limpiarMarcadores();
+
+        if (!jugador) return;
+
+        const jugadorData = await fetch(`/api/jugador/${encodeURIComponent(jugador)}`).then(r => r.json());
+
+        if (!jugadorData.password) {
+            alert("Su jugador no tiene contraseña aún, hable con el administrador");
+            combo.value = '';
+            return;
+        }
+
+        let passwordCorrecta = false;
+
+        while (!passwordCorrecta) {
+            const passwordIngresada = await pedirPasswordModal(jugador);
+
+            if (passwordIngresada === null) {
+                combo.value = '';
+                limpiarMarcadores();
+                return;
+            }
+
+            const resp = await fetch(`/api/jugadores/${encodeURIComponent(jugador)}/verificar-password`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ password: passwordIngresada })
+            });
+
+        const data = await resp.json();
+
+            if (!resp.ok || !data.success) {
+                    alert(data.error || "Contraseña incorrecta");
+            } else {
+                passwordCorrecta = true;
+                jugadorValidado = jugador;
+                await cargarResultadosGuardados(jugador, ultimaJornada);
+            }
+        }
+    });
+
+
+
+
 });
 
 function loadPartidos(nombreJornada) {
@@ -110,7 +163,12 @@ function mostrarPartidos(partidos, fechaCierre) {
     partidos.forEach((partido, i) => {
         const partidoDiv = document.createElement('div');
 
-        partidoDiv.classList.add('partido-container');
+        partidoDiv.classList.add('partido-container');        
+
+        if (partido.comodin) {
+            partidoDiv.classList.add('partido-comodin');
+        }
+
         partidoDiv.dataset.equipo1 = partido.equipo1 || '';
         partidoDiv.dataset.equipo2 = partido.equipo2 || '';
         partidoDiv.dataset.comodin = partido.comodin ? 'true' : 'false';
@@ -122,6 +180,7 @@ function mostrarPartidos(partidos, fechaCierre) {
 
         partidoDiv.innerHTML = `
             <div class="match-teams">
+                ${partido.comodin ? '<div class="comodin-badge">⭐ COMODÍN</div>' : ''}
 
                 <div class="team-side">
                     ${logoHTML(partido.logoEquipo1, partido.equipo1)}
@@ -276,9 +335,41 @@ function pedirPasswordModal(jugador) {
 }
 
 
+function limpiarMarcadores() {
+    document.querySelectorAll('.partido-container').forEach(partidoDiv => {
+        const inputs = partidoDiv.querySelectorAll('input');
+
+        if (inputs[0]) inputs[0].value = '';
+        if (inputs[1]) inputs[1].value = '';
+    });
+}
+
+async function cargarResultadosGuardados(jugador, jornada) {
+    if (!jugador || !jornada) return;
+
+    try {
+        const res = await fetch(`/api/resultados/${encodeURIComponent(jugador)}/${encodeURIComponent(jornada)}`);
+        const pronosticos = await res.json();
+
+        if (!Array.isArray(pronosticos) || pronosticos.length === 0) return;
+
+        pronosticos.forEach((p, index) => {
+            const input1 = document.getElementById(`resultadoEquipo1_${index}`);
+            const input2 = document.getElementById(`resultadoEquipo2_${index}`);
+
+            if (input1) input1.value = p.marcador1 ?? '';
+            if (input2) input2.value = p.marcador2 ?? '';
+        });
+
+    } catch (error) {
+        console.error('Error cargando resultados guardados:', error);
+    }
+}
 
 
-async function guardarResultados(jornada, fechaCierre) {
+
+
+async function guardarResultados(jornada, fechaCierre, jugadorValidado) {
     const combo = document.getElementById('comboJugadores');
     const jugador = combo.value;
     if (!jugador) {
@@ -295,60 +386,38 @@ async function guardarResultados(jornada, fechaCierre) {
         }
     }
 
-    // 2. Verificar que el jugador tenga contraseña
-    const jugadorData = await fetch(`/api/jugador/${jugador}`).then(r => r.json());
-    if (!jugadorData.password) {
-        alert("Su jugador no tiene contraseña aun, hable con el administrador");
+    if (jugador !== jugadorValidado) {
+        alert("Debe seleccionar el jugador y validar la contraseña antes de guardar.");
         return;
     }
 
-    // 3. Pedir contraseña y validarla
-    let passwordCorrecta = false;
-    while (!passwordCorrecta) {
-        const passwordIngresada = await pedirPasswordModal(jugador);
-        if (passwordIngresada === null) return; // Cancelado
-        const resp = await fetch(`/api/jugadores/${jugador}/verificar-password`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ password: passwordIngresada })
-        });
-
-/*        
-        if (!resp.ok) {
-            const text = await resp.text(); // para depurar
-            console.error("Error en verificación de contraseña:", text);
-            alert("Error al verificar contraseña");
-            return;
-        }
-  */
-
-        const data = await resp.json();
-
-        if (!data.success) {
-            alert("Contraseña incorrecta");
-        } else {
-            passwordCorrecta = true;
-        }
-    }
 
     // 4. Preparar pronósticos
     const partidosContainer = document.getElementById('partidosContainer');
     const pronosticos = [];
+    let hayResultadosFaltantes = false;
     let errorDetectado = false;
 
     Array.from(document.querySelectorAll('.partido-container')).forEach((partidoDiv, index) => {
         const inputs = partidoDiv.querySelectorAll('input');
+    
         const marcador1 = inputs[0].value.trim();
         const marcador2 = inputs[1].value.trim();
 
-        // Validación de espacios en blanco
+        // Si uno de los dos está vacío
         if (marcador1 === '' || marcador2 === '') {
-            alert(`Error: faltan resultados por agregar en el partido ${index + 1}`);
-            errorDetectado = true;
+
+            hayResultadosFaltantes = true;
+
+            pronosticos.push({
+                marcador1: '',
+                marcador2: ''
+            });
+
             return;
         }
 
-        // Validación de solo números
+        // Validación de números
         if (isNaN(marcador1) || isNaN(marcador2)) {
             alert(`Error: solo se permiten valores numéricos en el partido ${index + 1}`);
             errorDetectado = true;
@@ -356,12 +425,26 @@ async function guardarResultados(jornada, fechaCierre) {
         }
 
         pronosticos.push({
-            marcador1: marcador1,
-            marcador2: marcador2
+            marcador1,
+            marcador2
         });
     });
 
-    if (errorDetectado) return; // Salir si hubo error
+    if (errorDetectado) {
+        return;
+    }
+
+    if (hayResultadosFaltantes) {
+    
+        const continuar = confirm(
+            'Faltan resultados por agregar.\n\n¿Está seguro que desea guardar?'
+        );
+    
+        if (!continuar) {
+            return;
+        }
+    }
+
 
 
     // 5. Guardar en backend
@@ -371,5 +454,5 @@ async function guardarResultados(jornada, fechaCierre) {
         body: JSON.stringify({ jugador, jornada, pronosticos })
     });
 
-    alert("Recuerda enviar un mensaje en el grupo escribiendo que sus resultados ya fueron guardados.\n Revise en Resultados Pronosticados por Jugador que sus resultados son los correctos.\n Resultados guardados correctamente");
+    alert("Revise en Resultados Pronosticados por Jugador que sus resultados son los correctos.\n Resultados guardados correctamente");
 }

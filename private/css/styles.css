@@ -1252,3 +1252,49 @@ button + button {
 .campeon-table td {
   font-size: 14px;
 }
+
+.partido-comodin {
+  position: relative;
+  border: 2px solid #facc15;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.18), rgba(255, 255, 255, 0.95));
+  box-shadow: 0 0 18px rgba(250, 204, 21, 0.45);
+}
+
+.partido-comodin .match-teams {
+  position: relative;
+  padding-top: 34px;
+}
+
+.comodin-badge {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: #facc15;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+}
+
+.jornada-match-card {
+  width: 100%;
+}
+
+.match-date-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  opacity: 0.85;
+}
+
+.match-date-row .badge {
+  margin-left: auto;
+}
+

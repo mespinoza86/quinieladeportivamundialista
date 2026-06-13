@@ -54,6 +54,22 @@ function logoHTML(url, nombre) {
     return `<img src="${url}" class="team-logo" alt="${nombre || 'Equipo'}">`;
 }
 
+function formatearFechaPartido(fecha) {
+    if (!fecha) return 'Fecha pendiente';
+
+    const d = new Date(fecha);
+
+    if (Number.isNaN(d.getTime())) {
+        return fecha;
+    }
+
+    return d.toLocaleString('es-CR', {
+        timeZone: 'America/Costa_Rica',
+        dateStyle: 'short',
+        timeStyle: 'short'
+    });
+}
+
 function mostrarPartidosDeJornada(partidos, fechaCierre) {
     const partidosJornadaList = document.getElementById('partidosJornadaList');
     partidosJornadaList.innerHTML = '';
@@ -77,22 +93,28 @@ function mostrarPartidosDeJornada(partidos, fechaCierre) {
         const li = document.createElement('li');
 
         li.innerHTML = `
-            <div class="match-teams">
-                <div class="team-side">
-                    ${logoHTML(partido.logoEquipo1, partido.equipo1)}
-                    <strong>${partido.equipo1}</strong>
-                </div>
+    <div class="match-card jornada-match-card">
+        <div class="match-date-row">
+            📅 ${formatearFechaPartido(partido.apiDate)}
+            ${partido.comodin ? '<span class="badge">Comodín</span>' : ''}
+        </div>
 
-                <span class="vs">vs</span>
-
-                <div class="team-side">
-                    ${logoHTML(partido.logoEquipo2, partido.equipo2)}
-                    <strong>${partido.equipo2}</strong>
-                </div>
-
-                ${partido.comodin ? '<span class="badge">Comodín</span>' : ''}
+        <div class="match-teams">
+            <div class="team-side">
+                ${logoHTML(partido.logoEquipo1, partido.equipo1)}
+                <strong>${partido.equipo1}</strong>
             </div>
-        `;
+
+            <span class="vs">vs</span>
+
+            <div class="team-side">
+                ${logoHTML(partido.logoEquipo2, partido.equipo2)}
+                <strong>${partido.equipo2}</strong>
+            </div>
+        </div>
+    </div>
+`;
+
 
         partidosJornadaList.appendChild(li);
     });
