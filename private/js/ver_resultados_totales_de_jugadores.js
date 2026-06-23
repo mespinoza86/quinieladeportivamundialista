@@ -2,7 +2,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     try {
         const jornadaSelect = document.getElementById('jornada-select');
         const verResultadosBtn = document.getElementById('ver-resultados-btn');
-        const tablaCuerpo = document.querySelector('#tabla-resultados tbody');
+        const resultadosCards = document.getElementById('resultados-cards');
 
         const resultadosResponse = await fetch('/api/resultados');
         const resultadosData = await resultadosResponse.json();
@@ -19,11 +19,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
 
         function mostrarMensaje(mensaje) {
-            tablaCuerpo.innerHTML = `
-                <tr>
-                    <td colspan="4">${mensaje}</td>
-                </tr>
-            `;
+            resultadosCards.innerHTML = `<div class="resultados-mensaje">${mensaje}</div>`;
         }
 
         jornadaSelect.innerHTML = '';
@@ -93,9 +89,7 @@ function formatearFecha(fecha) {
 
     const d = new Date(fecha);
 
-    if (Number.isNaN(d.getTime())) {
-        return fecha;
-    }
+    if (Number.isNaN(d.getTime())) return fecha;
 
     return d.toLocaleString('es-CR', {
         timeZone: 'America/Costa_Rica',
@@ -112,22 +106,15 @@ function estadoPartidoHTML(partido) {
     }
 
     if (partido.estado === 'MT') {
-        return `<span class="status-pill status-live">
-            <span class="live-dot"></span>
-            MT
-        </span>`;
+        return `<span class="status-pill status-live"><span class="live-dot"></span>MT</span>`;
     }
 
     if (partido.estado === 'LIVE' && partido.minuto) {
-        return `<span class="status-pill status-live">
-            <span class="live-dot"></span>
-            ${partido.minuto}${String(partido.minuto).includes('+') ? '' : "'"}
-        </span>`;
+        return `<span class="status-pill status-live"><span class="live-dot"></span>${partido.minuto}${String(partido.minuto).includes('+') ? '' : "'"}</span>`;
     }
 
     return `<span class="status-pill status-scheduled">${formatearFecha(partido.fecha)}</span>`;
 }
-
 
 function buscarOficialPorPartido(resultadosOficiales, partidoBase) {
     return resultadosOficiales.find(p =>
@@ -155,8 +142,8 @@ function normalizarOficial(partidoOficial, partidoBase) {
 }
 
 function mostrarResultados(jornada, resultadosData, oficialesData) {
-    const tablaCuerpo = document.querySelector('#tabla-resultados tbody');
-    tablaCuerpo.innerHTML = '';
+    const resultadosCards = document.getElementById('resultados-cards');
+    resultadosCards.innerHTML = '';
 
     const resultadosJornada = resultadosData.filter(jugador => {
         const partes = jugador[0].split('_');
@@ -201,56 +188,83 @@ function mostrarResultados(jornada, resultadosData, oficialesData) {
         });
 
         if (partidosMap.size === 0) {
-            tablaCuerpo.innerHTML = `
-                <tr>
-                    <td colspan="4">No hay resultados para esta jornada.</td>
-                </tr>
-            `;
+            resultadosCards.innerHTML = `<div class="resultados-mensaje">No hay resultados para esta jornada.</div>`;
+            return;
         }
 
+        let partidoIndex = 0;
+
         partidosMap.forEach((data) => {
+            partidoIndex++;
+
             const partidoOficial = data.oficial;
+            const grupoId = `detalle-partido-${partidoIndex}`;
 
-            const resultadoOficialTexto = partidoOficial
-                ? `
-                    <div class="official-result-cell">
-                        <span>
-                            ${partidoOficial.equipo1}
-                            ${marcador(partidoOficial.marcador1)}
-                            -
-                            ${marcador(partidoOficial.marcador2)}
-                            ${partidoOficial.equipo2}
-                        </span>
-                        ${estadoPartidoHTML(partidoOficial)}
+            const oficialEquipo1 = partidoOficial ? partidoOficial.equipo1 : data.partido.equipo1;
+            const oficialEquipo2 = partidoOficial ? partidoOficial.equipo2 : data.partido.equipo2;
+            const oficialMarcador1 = partidoOficial ? marcador(partidoOficial.marcador1) : '-';
+            const oficialMarcador2 = partidoOficial ? marcador(partidoOficial.marcador2) : '-';
+
+            const card = document.createElement('article');
+            card.className = 'match-card';
+
+            card.innerHTML = `
+                <div class="match-main">
+                    <div class="match-left">
+                        <div class="match-title">${data.partido.equipo1} vs ${data.partido.equipo2}</div>
                     </div>
-                `
-                : 'N/A';
 
-            data.jugadores.forEach((jugador, index) => {
-                const fila = document.createElement('tr');
+                    <div class="match-score">
+                        <span>${oficialEquipo1}</span>
+                        <strong>${oficialMarcador1} - ${oficialMarcador2}</strong>
+                        <span>${oficialEquipo2}</span>
+                    </div>
 
-                const celdaJugador = document.createElement('td');
-                celdaJugador.textContent = jugador.nombreJugador;
-                fila.appendChild(celdaJugador);
+                    <div class="match-status">
+                        ${partidoOficial ? estadoPartidoHTML(partidoOficial) : '<span class="status-pill">N/A</span>'}
+                    </div>
+                </div>
 
-                const celdaPronosticado = document.createElement('td');
-                celdaPronosticado.textContent =
-                    `${data.partido.equipo1} ${jugador.marcador1} - ${jugador.marcador2} ${data.partido.equipo2}`;
-                fila.appendChild(celdaPronosticado);
+                <button type="button" class="match-toggle-btn" data-grupo="${grupoId}">
+                    <span>Ver resultados</span>
+                    <span class="toggle-icon">›</span>
+                </button>
 
-                const celdaOficial = document.createElement('td');
-                celdaOficial.innerHTML = index === 0 ? resultadoOficialTexto : "";
-                fila.appendChild(celdaOficial);
+                <div class="players-detail" id="${grupoId}">
+                    <div class="players-header">
+                        <span>Jugador</span>
+                        <span>Pronóstico</span>
+                        <span>Puntos</span>
+                    </div>
 
-                const celdaPuntos = document.createElement('td');
-                const puntosObtenidos = calcularPuntos(
-                    { marcador1: jugador.marcador1, marcador2: jugador.marcador2 },
-                    partidoOficial
-                );
-                celdaPuntos.textContent = puntosObtenidos;
-                fila.appendChild(celdaPuntos);
+                    ${data.jugadores.map(jugador => {
+                        const puntosObtenidos = calcularPuntos(
+                            { marcador1: jugador.marcador1, marcador2: jugador.marcador2 },
+                            partidoOficial
+                        );
 
-                tablaCuerpo.appendChild(fila);
+                        return `
+                            <div class="player-row">
+                                <span>${jugador.nombreJugador}</span>
+                                <span>${data.partido.equipo1} ${jugador.marcador1} - ${jugador.marcador2} ${data.partido.equipo2}</span>
+                                <span>${puntosObtenidos}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+
+            resultadosCards.appendChild(card);
+        });
+
+        document.querySelectorAll('.match-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const grupoId = this.dataset.grupo;
+                const detalle = document.getElementById(grupoId);
+                const abierto = detalle.classList.toggle('open');
+
+                this.querySelector('span:first-child').textContent = abierto ? 'Minimizar' : 'Ver resultados';
+                this.querySelector('.toggle-icon').textContent = abierto ? '⌃' : '›';
             });
         });
 
