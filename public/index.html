@@ -69,7 +69,15 @@
           <p>Registrar pronósticos</p>
         </div>
       </a>
-            
+
+      <a id="llenarTriviaCard" href="llenar_trivia.html" class="menu-card"  style="display:none">
+  <div class="menu-icon">🎯</div>
+  <div>
+    <h3>Llenar Trivia</h3>
+    <p>Responde preguntas extra y gana puntos adicionales.</p>
+  </div>
+</a>
+
       <a class="action-card" href="ver-resultados-oficiales.html">
         <span class="icon">✅</span>
         <div>
@@ -77,6 +85,15 @@
           <p>Marcadores reales</p>
         </div>
       </a>
+
+            <a class="action-card" href="ver_resultados_trivias.html">
+        <span class="icon">🎯</span>
+        <div>
+          <h3>Resultados de Trivias</h3>
+          <p>Ver respuestas y puntos extra por jornada</p>
+        </div>
+      </a>
+
 
       <a class="action-card" href="ver-pronosticos-campeon.html">
         <span class="icon">🏆</span>
@@ -178,6 +195,24 @@
 
   <script src="js/index-live.js"></script>
   <script src="js/index-ranking.js"></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    const card = document.getElementById('llenarTriviaCard');
+    if (!card) return;
+
+    try {
+      const res = await fetch('/api/trivias/activas');
+      const trivias = await res.json();
+
+      if (Array.isArray(trivias) && trivias.length > 0) {
+        card.style.display = 'flex';
+      }
+    } catch (error) {
+      console.error('Error revisando trivias activas:', error);
+    }
+  });
+</script>
+
 
 </body>
 </html>

@@ -68,6 +68,8 @@ const paginasAdmin = [
   '/generar_reporte.html',
   '/enviarresultados.html',
   '/copiarresultadojugador.html',
+  '/admin_trivias.html',
+  '/enviarresultadostrivias.html',
   '/campeon-oficial.html'
 ];
 
@@ -234,6 +236,35 @@ const ResultadoOficialSchema = new mongoose.Schema({
   }]
 });
 
+const triviaSchema = new mongoose.Schema({
+  jornadaNombre: String,
+  partidoIndex: Number,
+  apiFixtureId: String,
+  equipo1: String,
+  equipo2: String,
+  tipo: String,
+  pregunta: String,
+  opciones: [String],
+  puntos: { type: Number, default: 1 },
+  fechaCierre: Date,
+  respuestaCorrecta: String,
+  resuelta: { type: Boolean, default: false },
+  activa: { type: Boolean, default: true }
+}, { timestamps: true });
+
+
+const respuestaTriviaSchema = new mongoose.Schema({
+  jugador: String,
+  triviaId: String,
+  respuesta: String,
+  puntos: { type: Number, default: 0 },
+  fechaRespuesta: { type: Date, default: Date.now }
+});
+
+const Trivia = mongoose.model('Trivia', triviaSchema);
+const RespuestaTrivia = mongoose.model('RespuestaTrivia', respuestaTriviaSchema);
+
+
 
 const EquipoSchema = new mongoose.Schema({
   nombre: { type: String, required: true, unique: true }
@@ -260,6 +291,64 @@ const CampeonOficialSchema = new mongoose.Schema({
 const PronosticoCampeon = mongoose.model('PronosticoCampeon', PronosticoCampeonSchema);
 const CampeonOficial = mongoose.model('CampeonOficial', CampeonOficialSchema);
 
+
+const TIPOS_TRIVIA = {
+  primer_gol: {
+    pregunta: '¿Qué equipo anota primero?'
+  },
+  mas_amarillas: {
+    pregunta: '¿Qué equipo tendrá más tarjetas amarillas?'
+  },
+  mas_rojas: {
+    pregunta: '¿Qué equipo tendrá más tarjetas rojas?'
+  },
+  ambos_anotan: {
+    pregunta: '¿Ambos equipos anotan?'
+  },
+  gol_primer_tiempo: {
+    pregunta: '¿Habrá gol en el primer tiempo?'
+  },
+  gol_segundo_tiempo: {
+    pregunta: '¿Habrá gol en el segundo tiempo?'
+  }
+};
+
+
+function opcionesTrivia(tipo, equipo1, equipo2) {
+  if (tipo === 'primer_gol') {
+    return [equipo1, equipo2, 'Nadie anotará'];
+  }
+
+  if (tipo === 'mas_amarillas') {
+    return [equipo1, equipo2, 'Empate', 'No habrá tarjetas amarillas'];
+  }
+
+  if (tipo === 'mas_rojas') {
+    return [equipo1, equipo2, 'Empate', 'No habrá tarjetas rojas'];
+  }
+
+
+  if (tipo === 'ambos_anotan') {
+    return ['Sí', 'No'];
+  }
+
+  if (tipo === 'gol_primer_tiempo') {
+    return ['Sí', 'No'];
+  }
+
+  if (tipo === 'gol_segundo_tiempo') {
+    return ['Sí', 'No'];
+  }
+
+  return [];
+}
+
+function triviaCerrada(trivia) {
+  if (!trivia.fechaCierre) return false;
+  return new Date(trivia.fechaCierre) <= new Date();
+}
+
+
 /* ================= HTML Routes ================= */
 
 [
@@ -281,7 +370,8 @@ const CampeonOficial = mongoose.model('CampeonOficial', CampeonOficialSchema);
   '/verResultados_puntos',
   '/campeon-oficial',
   '/pronostico-campeon',
-  '/importar_partidos'
+  '/importar_partidos',
+  '/ver_resultados_trivias'
 ].forEach(route => {
   app.get(route, (req, res) => {
     let nombreArchivo = route === '/' ? 'index.html' : route.replace('/', '');
@@ -841,8 +931,9 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
 
           estado: 'PROGRAMADO',
           minuto: null,
-          fecha: partido.apiDate || ''          
+          fecha: partido.apiDate || ''
         });
+
         continue;
       }
 
@@ -867,7 +958,7 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
 
         estado: estadoPartido.estado,
         minuto: estadoPartido.minuto,
-        fecha: partido.apiDate || ''        
+        fecha: partido.apiDate || ''
       });
     }
 
@@ -880,6 +971,8 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
       { upsert: true, new: true }
     );
 
+    await resolverTriviasPendientes(jornada);
+
     res.json({
       success: true,
       jornada,
@@ -889,6 +982,35 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
   } catch (error) {
     console.error('Error sincronizando resultados oficiales:', error.response?.data || error.message);
     res.status(500).json({ error: 'Error sincronizando resultados oficiales' });
+  }
+});
+
+
+
+app.get('/api/admin/respuestas-trivias-jornada/:jornadaNombre', requireAdmin, async (req, res) => {
+  try {
+    const { jornadaNombre } = req.params;
+
+    const trivias = await Trivia.find({
+      jornadaNombre,
+      activa: true
+    }).sort({ partidoIndex: 1, tipo: 1 });
+
+    const triviaIds = trivias.map(t => t._id.toString());
+
+    const respuestas = await RespuestaTrivia.find({
+      triviaId: { $in: triviaIds }
+    }).sort({ jugador: 1 });
+
+    res.json({
+      jornadaNombre,
+      trivias,
+      respuestas
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo respuestas de trivias:', error);
+    res.status(500).json({ error: 'Error obteniendo respuestas de trivias.' });
   }
 });
 
@@ -1025,6 +1147,704 @@ app.get('/api/resultados-oficiales/:jornada', async (req, res) => {
   }
 });
 
+app.get('/api/tipos-trivia', (req, res) => {
+  res.json([
+    { tipo: 'primer_gol', pregunta: TIPOS_TRIVIA.primer_gol.pregunta },
+    { tipo: 'mas_amarillas', pregunta: TIPOS_TRIVIA.mas_amarillas.pregunta },
+    { tipo: 'mas_rojas', pregunta: TIPOS_TRIVIA.mas_rojas.pregunta },
+    { tipo: 'ambos_anotan', pregunta: TIPOS_TRIVIA.ambos_anotan.pregunta },
+    { tipo: 'gol_primer_tiempo', pregunta: TIPOS_TRIVIA.gol_primer_tiempo.pregunta },
+    { tipo: 'gol_segundo_tiempo', pregunta: TIPOS_TRIVIA.gol_segundo_tiempo.pregunta }
+  ]);
+});
+
+
+
+app.post('/api/admin/trivias', requireAdmin, async (req, res) => {
+  try {
+    const { jornadaNombre, partidoIndex, tipos, fechaCierre } = req.body;
+
+    if (!jornadaNombre || partidoIndex === undefined || !Array.isArray(tipos) || tipos.length === 0 || !fechaCierre) {
+      return res.status(400).json({ error: 'Faltan datos para crear las trivias.' });
+    }
+
+    const jornada = await Jornada.findOne({ nombre: jornadaNombre });
+
+    if (!jornada) {
+      return res.status(404).json({ error: 'Jornada no encontrada.' });
+    }
+
+    const partido = jornada.partidos[Number(partidoIndex)];
+
+    if (!partido) {
+      return res.status(404).json({ error: 'Partido no encontrado.' });
+    }
+
+    const creadas = [];
+
+    for (const tipo of tipos) {
+      if (!TIPOS_TRIVIA[tipo]) continue;
+
+      const existe = await Trivia.findOne({
+        jornadaNombre,
+        partidoIndex: Number(partidoIndex),
+        tipo,
+        activa: true
+      });
+
+      if (existe) {
+        existe.fechaCierre = new Date(fechaCierre);
+        await existe.save();
+        continue;
+      }
+
+      const trivia = new Trivia({
+        jornadaNombre,
+        partidoIndex: Number(partidoIndex),
+        apiFixtureId: partido.apiFixtureId || partido.fixtureId || '',
+        equipo1: partido.equipo1,
+        equipo2: partido.equipo2,
+        tipo,
+        pregunta: TIPOS_TRIVIA[tipo].pregunta,
+        opciones: opcionesTrivia(tipo, partido.equipo1, partido.equipo2),
+        puntos: 1,
+        fechaCierre: new Date(fechaCierre),
+        respuestaCorrecta: '',
+        resuelta: false,
+        activa: true
+      });
+
+      await trivia.save();
+      creadas.push(trivia);
+    }
+
+    res.json({
+      mensaje: 'Trivias creadas correctamente.',
+      creadas
+    });
+
+  } catch (error) {
+    console.error('Error creando trivias:', error);
+    res.status(500).json({ error: 'Error creando trivias.' });
+  }
+});
+
+app.get('/api/admin/trivias/:jornadaNombre', requireAdmin, async (req, res) => {
+  try {
+    const trivias = await Trivia.find({
+      jornadaNombre: req.params.jornadaNombre,
+      activa: true
+    }).sort({ partidoIndex: 1, tipo: 1 });
+
+    res.json(trivias);
+
+  } catch (error) {
+    console.error('Error obteniendo trivias admin:', error);
+    res.status(500).json({ error: 'Error obteniendo trivias.' });
+  }
+});
+
+
+app.put('/api/admin/trivias/:jornadaNombre', requireAdmin, async (req, res) => {
+  try {
+    const { jornadaNombre } = req.params;
+    const { fechaCierre, configuracion } = req.body;
+
+    if (!jornadaNombre || !fechaCierre || !Array.isArray(configuracion)) {
+      return res.status(400).json({ error: 'Datos inválidos para actualizar trivias.' });
+    }
+
+    const jornada = await Jornada.findOne({ nombre: jornadaNombre });
+
+    if (!jornada) {
+      return res.status(404).json({ error: 'Jornada no encontrada.' });
+    }
+
+    const fecha = new Date(fechaCierre);
+
+    const existentes = await Trivia.find({
+      jornadaNombre,
+      activa: true
+    });
+
+    const seleccionadas = new Set();
+
+    configuracion.forEach(item => {
+      if (!Array.isArray(item.tipos)) return;
+
+      item.tipos.forEach(tipo => {
+        seleccionadas.add(`${Number(item.partidoIndex)}_${tipo}`);
+      });
+    });
+
+    let creadas = 0;
+    let actualizadas = 0;
+    let eliminadas = 0;
+
+    for (const trivia of existentes) {
+      const clave = `${Number(trivia.partidoIndex)}_${trivia.tipo}`;
+
+      if (!seleccionadas.has(clave)) {
+        await RespuestaTrivia.deleteMany({
+          triviaId: trivia._id.toString()
+        });
+
+        await Trivia.deleteOne({
+          _id: trivia._id
+        });
+
+        eliminadas++;
+        continue;
+      }
+
+      const fechaAnterior = trivia.fechaCierre ? new Date(trivia.fechaCierre).getTime() : null;
+      const fechaNueva = fecha.getTime();
+
+      trivia.fechaCierre = fecha;
+
+      if (fechaAnterior !== fechaNueva) {
+        trivia.resuelta = false;
+        trivia.respuestaCorrecta = '';
+
+        await RespuestaTrivia.updateMany(
+          { triviaId: trivia._id.toString() },
+          { $set: { puntos: 0 } }
+        );
+      }
+
+      await trivia.save();
+      actualizadas++;
+    }
+
+    for (const item of configuracion) {
+      const partidoIndex = Number(item.partidoIndex);
+      const partido = jornada.partidos[partidoIndex];
+
+      if (!partido || !Array.isArray(item.tipos)) continue;
+
+      for (const tipo of item.tipos) {
+        if (!TIPOS_TRIVIA[tipo]) continue;
+
+        const existe = await Trivia.findOne({
+          jornadaNombre,
+          partidoIndex,
+          tipo,
+          activa: true
+        });
+
+        if (existe) continue;
+
+        const trivia = new Trivia({
+          jornadaNombre,
+          partidoIndex,
+          apiFixtureId: partido.apiFixtureId || partido.fixtureId || '',
+          equipo1: partido.equipo1,
+          equipo2: partido.equipo2,
+          tipo,
+          pregunta: TIPOS_TRIVIA[tipo].pregunta,
+          opciones: opcionesTrivia(tipo, partido.equipo1, partido.equipo2),
+          puntos: 1,
+          fechaCierre: fecha,
+          respuestaCorrecta: '',
+          resuelta: false,
+          activa: true
+        });
+
+        await trivia.save();
+        creadas++;
+      }
+    }
+
+    res.json({
+      mensaje: `Cambios guardados. Creadas: ${creadas}, actualizadas: ${actualizadas}, eliminadas: ${eliminadas}.`,
+      creadas,
+      actualizadas,
+      eliminadas
+    });
+
+  } catch (error) {
+    console.error('Error actualizando trivias:', error);
+    res.status(500).json({ error: 'Error actualizando trivias.' });
+  }
+});
+
+
+app.delete('/api/admin/trivias/:triviaId', requireAdmin, async (req, res) => {
+  try {
+    const { triviaId } = req.params;
+
+    const trivia = await Trivia.findById(triviaId);
+
+    if (!trivia) {
+      return res.status(404).json({ error: 'Trivia no encontrada.' });
+    }
+
+    await RespuestaTrivia.deleteMany({
+      triviaId: trivia._id.toString()
+    });
+
+    await Trivia.deleteOne({
+      _id: trivia._id
+    });
+
+    res.json({
+      mensaje: 'Trivia eliminada correctamente. También se eliminaron sus respuestas y puntos.'
+    });
+
+  } catch (error) {
+    console.error('Error eliminando trivia:', error);
+    res.status(500).json({ error: 'Error eliminando trivia.' });
+  }
+});
+
+
+////////Starting trivias activas ////////////////
+
+app.get('/api/trivias/activas', async (req, res) => {
+  try {
+    const trivias = await Trivia.find({
+      activa: true,
+      fechaCierre: { $gt: new Date() }
+    }).sort({ fechaCierre: 1 });
+
+    res.json(trivias);
+  } catch (error) {
+    console.error('Error obteniendo trivias activas:', error);
+    res.status(500).json({ error: 'Error obteniendo trivias activas.' });
+  }
+});
+
+
+
+///////// Starting trivias latest ///////////////
+
+app.get('/api/trivias/latest', async (req, res) => {
+  try {
+    const ultimaTrivia = await Trivia.findOne({ activa: true })
+      .sort({ fechaCierre: -1, createdAt: -1 });
+
+    if (!ultimaTrivia) {
+      return res.json({
+        jornadaNombre: null,
+        fechaCierre: null,
+        cerrada: false,
+        trivias: []
+      });
+    }
+
+    const trivias = await Trivia.find({
+      activa: true,
+      jornadaNombre: ultimaTrivia.jornadaNombre
+    }).sort({ partidoIndex: 1, tipo: 1 });
+
+    const fechaCierre = ultimaTrivia.fechaCierre;
+    const cerrada = fechaCierre ? new Date(fechaCierre) <= new Date() : false;
+
+    res.json({
+      jornadaNombre: ultimaTrivia.jornadaNombre,
+      fechaCierre,
+      cerrada,
+      trivias
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo última trivia:', error);
+    res.status(500).json({ error: 'Error obteniendo última trivia.' });
+  }
+});
+
+
+
+/////// api trivias ///////
+app.get('/api/trivias', async (req, res) => {
+  try {
+    const trivias = await Trivia.find({ activa: true }).sort({ jornadaNombre: 1, partidoIndex: 1 });
+    res.json(trivias);
+  } catch (error) {
+    console.error('Error obteniendo trivias:', error);
+    res.status(500).json({ error: 'Error obteniendo trivias.' });
+  }
+});
+
+
+
+////// End point trivia here /////////
+
+app.get('/api/trivias/:jornadaNombre', async (req, res) => {
+  try {
+    const trivias = await Trivia.find({
+      jornadaNombre: req.params.jornadaNombre,
+      activa: true
+    }).sort({ partidoIndex: 1 });
+
+    res.json(trivias);
+  } catch (error) {
+    console.error('Error obteniendo trivias por jornada:', error);
+    res.status(500).json({ error: 'Error obteniendo trivias por jornada.' });
+  }
+});
+
+app.get('/api/respuestas-trivia/:jugador/:jornadaNombre', async (req, res) => {
+  try {
+    const { jugador, jornadaNombre } = req.params;
+
+    const trivias = await Trivia.find({
+      jornadaNombre,
+      activa: true
+    });
+
+    const triviaIds = trivias.map(t => t._id.toString());
+
+    const respuestas = await RespuestaTrivia.find({
+      jugador,
+      triviaId: { $in: triviaIds }
+    });
+
+    res.json(respuestas);
+  } catch (error) {
+    console.error('Error obteniendo respuestas de trivia:', error);
+    res.status(500).json({ error: 'Error obteniendo respuestas de trivia.' });
+  }
+});
+
+app.post('/api/respuestas-trivia', async (req, res) => {
+  try {
+    const { jugador, respuestas } = req.body;
+
+    if (!jugador || !Array.isArray(respuestas)) {
+      return res.status(400).json({ error: 'Datos inválidos.' });
+    }
+
+    for (const item of respuestas) {
+      const trivia = await Trivia.findById(item.triviaId);
+
+      if (!trivia) {
+        return res.status(404).json({ error: 'Trivia no encontrada.' });
+      }
+
+      if (triviaCerrada(trivia)) {
+        return res.status(403).json({
+          error: `La trivia "${trivia.pregunta}" ya está cerrada.`
+        });
+      }
+
+      await RespuestaTrivia.findOneAndUpdate(
+        {
+          jugador,
+          triviaId: item.triviaId
+        },
+        {
+          jugador,
+          triviaId: item.triviaId,
+          respuesta: item.respuesta,
+          fechaRespuesta: new Date()
+        },
+        {
+          upsert: true,
+          new: true
+        }
+      );
+    }
+
+    res.json({ mensaje: 'Respuestas de trivia guardadas correctamente.' });
+
+  } catch (error) {
+    console.error('Error guardando respuestas de trivia:', error);
+    res.status(500).json({ error: 'Error guardando respuestas de trivia.' });
+  }
+});
+
+
+async function obtenerEventoTrivia(apiFixtureId) {
+  if (!apiFixtureId) return null;
+
+  const response = await apiFootballCom.get('', {
+    params: {
+      action: 'get_events',
+      match_id: String(apiFixtureId),
+      APIkey: process.env.APIFOOTBALL_COM_KEY,
+      timezone: 'America/Costa_Rica'
+    }
+  });
+
+  if (!Array.isArray(response.data) || response.data.length === 0) {
+    console.log('APIfootball.com no devolvió evento para trivia:', apiFixtureId, response.data);
+    return null;
+  }
+
+  return response.data[0];
+}
+
+function numeroDesdeTexto(valor) {
+  const n = Number(String(valor || '').replace(/[^\d.-]/g, ''));
+  return Number.isNaN(n) ? 0 : n;
+}
+
+function minutoApiFootball(item) {
+  const raw = String(item?.time || '').replace('+', '.');
+  const n = Number(raw);
+  return Number.isNaN(n) ? 999 : n;
+}
+
+function esGolApiFootball(gol) {
+  const info = String(gol?.info || '').toLowerCase();
+
+  if (info.includes('cancel')) return false;
+  if (info.includes('disallow')) return false;
+  if (info.includes('var')) return false;
+
+  return Boolean(gol?.home_scorer || gol?.away_scorer);
+}
+
+function obtenerGolesValidos(evento) {
+  return Array.isArray(evento.goalscorer)
+    ? evento.goalscorer.filter(esGolApiFootball)
+    : [];
+}
+
+
+function obtenerEquipoPrimerGol(trivia, evento) {
+  const goles = Array.isArray(evento.goalscorer) ? evento.goalscorer : [];
+
+  const golesValidos = goles
+    .filter(esGolApiFootball)
+    .sort((a, b) => minutoApiFootball(a) - minutoApiFootball(b));
+
+  if (golesValidos.length === 0) return 'Nadie anotará';
+
+  const primerGol = golesValidos[0];
+
+  const homeApi = normalizarEquipo(evento.match_hometeam_name);
+  const awayApi = normalizarEquipo(evento.match_awayteam_name);
+  const equipo1 = normalizarEquipo(trivia.equipo1);
+  const equipo2 = normalizarEquipo(trivia.equipo2);
+
+  const apiInvertido = homeApi === equipo2 && awayApi === equipo1;
+
+  if (primerGol.home_scorer) {
+    return apiInvertido ? trivia.equipo2 : trivia.equipo1;
+  }
+
+  if (primerGol.away_scorer) {
+    return apiInvertido ? trivia.equipo1 : trivia.equipo2;
+  }
+
+  return '';
+}
+
+function contarTarjetasPorCards(evento, trivia, tipoTarjeta) {
+  const cards = Array.isArray(evento.cards) ? evento.cards : [];
+
+  const homeApi = normalizarEquipo(evento.match_hometeam_name);
+  const awayApi = normalizarEquipo(evento.match_awayteam_name);
+  const equipo1 = normalizarEquipo(trivia.equipo1);
+  const equipo2 = normalizarEquipo(trivia.equipo2);
+
+  const apiInvertido = homeApi === equipo2 && awayApi === equipo1;
+
+  let home = 0;
+  let away = 0;
+
+  cards.forEach(card => {
+    const tipo = String(card.card || '').toLowerCase();
+
+    if (tipoTarjeta === 'amarilla') {
+      if (!tipo.includes('yellow')) return;
+    }
+
+    if (tipoTarjeta === 'roja') {
+      if (!tipo.includes('red')) return;
+    }
+
+    if (card.home_fault) home++;
+    if (card.away_fault) away++;
+  });
+
+  return {
+    equipo1: apiInvertido ? away : home,
+    equipo2: apiInvertido ? home : away
+  };
+}
+
+function contarAmarillasPorStatistics(evento, trivia) {
+  const stats = Array.isArray(evento.statistics) ? evento.statistics : [];
+
+  const stat = stats.find(s =>
+    String(s.type || '').toLowerCase() === 'yellow cards'
+  );
+
+  if (!stat) return null;
+
+  const home = numeroDesdeTexto(stat.home);
+  const away = numeroDesdeTexto(stat.away);
+
+  const homeApi = normalizarEquipo(evento.match_hometeam_name);
+  const awayApi = normalizarEquipo(evento.match_awayteam_name);
+  const equipo1 = normalizarEquipo(trivia.equipo1);
+  const equipo2 = normalizarEquipo(trivia.equipo2);
+
+  const apiInvertido = homeApi === equipo2 && awayApi === equipo1;
+
+  return {
+    equipo1: apiInvertido ? away : home,
+    equipo2: apiInvertido ? home : away
+  };
+}
+
+function resolverRespuestaTrivia(trivia, evento) {
+  if (!evento) return '';
+
+  if (trivia.tipo === 'primer_gol') {
+    return obtenerEquipoPrimerGol(trivia, evento);
+  }
+
+  if (trivia.tipo === 'mas_amarillas') {
+    let conteo = contarTarjetasPorCards(evento, trivia, 'amarilla');
+
+    if (conteo.equipo1 === 0 && conteo.equipo2 === 0) {
+      const statsConteo = contarAmarillasPorStatistics(evento, trivia);
+      if (statsConteo) conteo = statsConteo;
+    }
+
+    if (conteo.equipo1 === 0 && conteo.equipo2 === 0) return 'No habrá tarjetas amarillas';
+    if (conteo.equipo1 > conteo.equipo2) return trivia.equipo1;
+    if (conteo.equipo2 > conteo.equipo1) return trivia.equipo2;
+    return 'Empate';
+  }
+
+  if (trivia.tipo === 'mas_rojas') {
+    const conteo = contarTarjetasPorCards(evento, trivia, 'roja');
+
+    if (conteo.equipo1 === 0 && conteo.equipo2 === 0) return 'No habrá tarjetas rojas';
+    if (conteo.equipo1 > conteo.equipo2) return trivia.equipo1;
+    if (conteo.equipo2 > conteo.equipo1) return trivia.equipo2;
+    return 'Empate';
+  }
+  
+
+  if (trivia.tipo === 'ambos_anotan') {
+    const goles = Array.isArray(evento.goalscorer) ? evento.goalscorer.filter(esGolApiFootball) : [];
+
+    const homeApi = normalizarEquipo(evento.match_hometeam_name);
+    const awayApi = normalizarEquipo(evento.match_awayteam_name);
+    const equipo1 = normalizarEquipo(trivia.equipo1);
+    const equipo2 = normalizarEquipo(trivia.equipo2);
+
+    const apiInvertido = homeApi === equipo2 && awayApi === equipo1;
+
+    let homeAnoto = false;
+    let awayAnoto = false;
+
+    goles.forEach(gol => {
+      if (gol.home_scorer) homeAnoto = true;
+      if (gol.away_scorer) awayAnoto = true;
+    });
+
+    const equipo1Anoto = apiInvertido ? awayAnoto : homeAnoto;
+    const equipo2Anoto = apiInvertido ? homeAnoto : awayAnoto;
+
+    return equipo1Anoto && equipo2Anoto ? 'Sí' : 'No';
+  }
+
+  if (trivia.tipo === 'gol_primer_tiempo') {
+  const goles = obtenerGolesValidos(evento);
+
+  const hayGolPrimerTiempo = goles.some(gol => {
+    const minuto = minutoApiFootball(gol);
+    return minuto > 0 && minuto <= 45.99;
+  });
+
+  return hayGolPrimerTiempo ? 'Sí' : 'No';
+}
+
+if (trivia.tipo === 'gol_segundo_tiempo') {
+  const goles = obtenerGolesValidos(evento);
+
+  const hayGolSegundoTiempo = goles.some(gol => {
+    const minuto = minutoApiFootball(gol);
+    return minuto >= 46;
+  });
+
+  return hayGolSegundoTiempo ? 'Sí' : 'No';
+}
+
+  return '';
+}
+
+
+async function resolverTriviasPendientes(jornadaNombre = null) {
+  const filtro = {
+    activa: true,
+    resuelta: false,
+    fechaCierre: { $lte: new Date() }
+  };
+
+  if (jornadaNombre) {
+    filtro.jornadaNombre = jornadaNombre;
+  }
+
+  const trivias = await Trivia.find(filtro);
+
+  for (const trivia of trivias) {
+    try {
+      if (!trivia.apiFixtureId) continue;
+
+      const oficial = await ResultadoOficial.findOne({
+        jornada: trivia.jornadaNombre
+      });
+
+      const partidoOficial = oficial?.resultados?.find(p =>
+        (p.equipo1 === trivia.equipo1 && p.equipo2 === trivia.equipo2) ||
+        (p.equipo1 === trivia.equipo2 && p.equipo2 === trivia.equipo1)
+      );
+
+      if (!partidoOficial || partidoOficial.estado !== 'TC') {
+        continue;
+      }
+
+      const evento = await obtenerEventoTrivia(trivia.apiFixtureId);
+      const respuestaCorrecta = resolverRespuestaTrivia(trivia, evento);
+
+      if (!respuestaCorrecta) continue;
+
+      trivia.respuestaCorrecta = respuestaCorrecta;
+      trivia.resuelta = true;
+      await trivia.save();
+
+      const respuestas = await RespuestaTrivia.find({
+        triviaId: trivia._id.toString()
+      });
+
+      for (const respuesta of respuestas) {
+        respuesta.puntos = respuesta.respuesta === respuestaCorrecta ? trivia.puntos : 0;
+        await respuesta.save();
+      }
+
+    } catch (error) {
+      console.error(`Error resolviendo trivia ${trivia._id}:`, error.message);
+    }
+  }
+}
+
+
+app.post('/api/admin/trivias/resolver', requireAdmin, async (req, res) => {
+  try {
+    await resolverTriviasPendientes();
+    res.json({ mensaje: 'Trivias resueltas correctamente.' });
+  } catch (error) {
+    console.error('Error resolviendo trivias:', error);
+    res.status(500).json({ error: 'Error resolviendo trivias.' });
+  }
+});
+
+setInterval(() => {
+  resolverTriviasPendientes().catch(error => {
+    console.error('Error automático resolviendo trivias:', error.message);
+  });
+}, 5 * 60 * 1000);
+
+
+
 /* ================= API: Equipos ================= */
 
 app.get('/api/equipos', async (req, res) => {
@@ -1085,6 +1905,119 @@ app.get('/api/resultados-con-equipos/:jugador/:jornada', async (req, res) => {
 
   res.json(resultadosConEquipos);
 });
+
+app.get('/api/trivias-jornadas', async (req, res) => {
+  try {
+    const trivias = await Trivia.find({ activa: true }).sort({ fechaCierre: 1 });
+
+    const mapa = new Map();
+
+    trivias.forEach(t => {
+      if (!mapa.has(t.jornadaNombre)) {
+        mapa.set(t.jornadaNombre, {
+          jornadaNombre: t.jornadaNombre,
+          fechaCierre: t.fechaCierre,
+          cerrada: t.fechaCierre ? new Date(t.fechaCierre) <= new Date() : false
+        });
+      }
+    });
+
+    res.json(Array.from(mapa.values()));
+  } catch (error) {
+    console.error('Error obteniendo jornadas de trivias:', error);
+    res.status(500).json({ error: 'Error obteniendo jornadas de trivias.' });
+  }
+});
+
+
+app.get('/api/resultados-trivias/:jornadaNombre', async (req, res) => {
+  try {
+    const { jornadaNombre } = req.params;
+
+    const trivias = await Trivia.find({
+      jornadaNombre,
+      activa: true
+    }).sort({ partidoIndex: 1, tipo: 1 });
+
+    if (!trivias.length) {
+      return res.json({
+        jornadaNombre,
+        cerrada: false,
+        trivias: []
+      });
+    }
+
+    const fechaCierre = trivias[0].fechaCierre;
+    const cerrada = fechaCierre ? new Date(fechaCierre) <= new Date() : false;
+
+    if (!cerrada) {
+      return res.status(403).json({
+        error: 'La trivia aún no ha cerrado, por lo tanto no puedes ver estos resultados aún.'
+      });
+    }
+
+    const triviaIds = trivias.map(t => t._id.toString());
+
+    const respuestas = await RespuestaTrivia.find({
+      triviaId: { $in: triviaIds }
+    });
+
+    const oficial = await ResultadoOficial.findOne({
+      jornada: jornadaNombre
+    });
+
+    const resultadosOficiales = oficial ? oficial.resultados : [];
+
+    const resultados = trivias.map(trivia => {
+      const respuestasTrivia = respuestas
+        .filter(r => String(r.triviaId) === String(trivia._id))
+        .map(r => ({
+          jugador: r.jugador,
+          respuesta: r.respuesta,
+          puntos: r.puntos || 0
+        }))
+        .sort((a, b) => a.jugador.localeCompare(b.jugador));
+
+      const partidoOficial = resultadosOficiales.find(p =>
+        (p.equipo1 === trivia.equipo1 && p.equipo2 === trivia.equipo2) ||
+        (p.equipo1 === trivia.equipo2 && p.equipo2 === trivia.equipo1)
+      );
+
+      return {
+        _id: trivia._id,
+        jornadaNombre: trivia.jornadaNombre,
+        partidoIndex: trivia.partidoIndex,
+        equipo1: trivia.equipo1,
+        equipo2: trivia.equipo2,
+        pregunta: trivia.pregunta,
+        tipo: trivia.tipo,
+        respuestaCorrecta: trivia.respuestaCorrecta || 'Pendiente de calcular',
+        resuelta: trivia.resuelta,
+        puntos: trivia.puntos || 1,
+
+        estado: partidoOficial?.estado || 'PROGRAMADO',
+        minuto: partidoOficial?.minuto ?? null,
+        fecha: partidoOficial?.fecha || '',
+        marcador1: partidoOficial?.marcador1 ?? null,
+        marcador2: partidoOficial?.marcador2 ?? null,
+
+        respuestas: respuestasTrivia
+      };
+    });
+
+    res.json({
+      jornadaNombre,
+      fechaCierre,
+      cerrada,
+      trivias: resultados
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo resultados de trivias:', error);
+    res.status(500).json({ error: 'Error obteniendo resultados de trivias.' });
+  }
+});
+
 
 app.post('/api/resultados-seguros/:jugador/:jornada', async (req, res) => {
   try {
@@ -1331,96 +2264,116 @@ app.post('/api/campeon-oficial', requireAdmin, async (req, res) => {
 
 
 app.get('/api/resultados-totales', async (req, res) => {
-  const jugadores = await Jugador.find({});
-  const jornadas = await Jornada.find({});
-  const resultados = await Resultado.find({});
-  const oficiales = await ResultadoOficial.find({});
-  const pronosticosCampeon = await PronosticoCampeon.find({});
-  const campeonOficial = await CampeonOficial.findOne({});
-  const mapCampeon = new Map();
+  try {
+    const jugadores = await Jugador.find({});
+    const jornadas = await Jornada.find({});
+    const resultados = await Resultado.find({});
+    const oficiales = await ResultadoOficial.find({});
+    const pronosticosCampeon = await PronosticoCampeon.find({});
+    const campeonOficial = await CampeonOficial.findOne({});
+    const respuestasTrivia = await RespuestaTrivia.find({});
 
-  pronosticosCampeon.forEach(p => {
-    mapCampeon.set(p.jugador, p.campeon);
-  });
+    const mapCampeon = new Map();
 
-  const mapRes = new Map();
-  resultados.forEach(r => mapRes.set(`${r.jugador}_${r.jornada}`, r.pronosticos));
+    pronosticosCampeon.forEach(p => {
+      mapCampeon.set(p.jugador, p.campeon);
+    });
 
-  const mapOficial = new Map();
-  oficiales.forEach(r => mapOficial.set(r.jornada, r.resultados));
+    const mapRes = new Map();
+    resultados.forEach(r => mapRes.set(`${r.jugador}_${r.jornada}`, r.pronosticos));
 
-  const resultadosTotales = {};
+    const mapOficial = new Map();
+    oficiales.forEach(r => mapOficial.set(r.jornada, r.resultados));
 
-  const resultado = (m1, m2) => {
-    if (m1 > m2) return 'gano';
-    if (m1 < m2) return 'perdio';
-    return 'empato';
-  };
+    const mapTrivias = new Map();
 
-  for (let j of jugadores) {
-    let totalPuntos = 0;
-    resultadosTotales[j.nombre] = {};
+    respuestasTrivia.forEach(r => {
+      const puntosActuales = mapTrivias.get(r.jugador) || 0;
+      mapTrivias.set(r.jugador, puntosActuales + (r.puntos || 0));
+    });
 
-    for (let jornada of jornadas) {
-      const key = `${j.nombre}_${jornada.nombre}`;
-      const pronosticos = mapRes.get(key) || [];
-      const oficialesJornada = mapOficial.get(jornada.nombre) || [];
+    const resultadosTotales = {};
 
-      let puntosJornada = 0;
+    const resultado = (m1, m2) => {
+      if (m1 > m2) return 'gano';
+      if (m1 < m2) return 'perdio';
+      return 'empato';
+    };
 
-      jornada.partidos.forEach((partido, index) => {
-        const p = pronosticos[index];
-        const o = oficialesJornada[index];
+    for (let j of jugadores) {
+      let totalPuntos = 0;
+      resultadosTotales[j.nombre] = {};
 
-        if (!p || !o) return;
+      let puntosCampeon = 0;
 
-        const valores = [o.marcador1, o.marcador2, p.marcador1, p.marcador2];
-        const sonNumerosValidos = valores.every(val =>
-          typeof val === 'number' && !isNaN(val)
-        );
+      const campeonJugador = mapCampeon.get(j.nombre);
 
-        if (!sonNumerosValidos) return;
-
-        const esComodin = o.comodin;
-
-        if (o.marcador1 === p.marcador1 && o.marcador2 === p.marcador2) {
-          puntosJornada += esComodin ? 7 : 5;
-        } else {
-          const rOf = resultado(o.marcador1, o.marcador2);
-          const rPr = resultado(p.marcador1, p.marcador2);
-
-          if (rOf === rPr) {
-            puntosJornada += esComodin ? 4 : 3;
-          }
-        }
-      });
-
-      resultadosTotales[j.nombre][jornada.nombre] = puntosJornada;
-      totalPuntos += puntosJornada;
-    }
-
-    let puntosCampeon = 0;
-
-    const campeonJugador = mapCampeon.get(j.nombre);
-
-    if (
+      if (
         campeonOficial &&
         campeonJugador &&
         String(campeonJugador).trim().toLowerCase() ===
         String(campeonOficial.campeon).trim().toLowerCase()
       ) {
-      puntosCampeon = campeonOficial.puntos || 20;
+        puntosCampeon = campeonOficial.puntos || 20;
+      }
+
+      resultadosTotales[j.nombre]['Campeón Mundial'] = puntosCampeon;
+      totalPuntos += puntosCampeon;
+
+      const puntosTrivias = mapTrivias.get(j.nombre) || 0;
+      resultadosTotales[j.nombre]['Trivias'] = puntosTrivias;
+      totalPuntos += puntosTrivias;
+
+      for (let jornada of jornadas) {
+        const key = `${j.nombre}_${jornada.nombre}`;
+        const pronosticos = mapRes.get(key) || [];
+        const oficialesJornada = mapOficial.get(jornada.nombre) || [];
+
+        let puntosJornada = 0;
+
+        jornada.partidos.forEach((partido, index) => {
+          const p = pronosticos[index];
+          const o = oficialesJornada[index];
+
+          if (!p || !o) return;
+
+          const valores = [o.marcador1, o.marcador2, p.marcador1, p.marcador2];
+          const sonNumerosValidos = valores.every(val =>
+            typeof val === 'number' && !isNaN(val)
+          );
+
+          if (!sonNumerosValidos) return;
+
+          const esComodin = o.comodin;
+
+          if (o.marcador1 === p.marcador1 && o.marcador2 === p.marcador2) {
+            puntosJornada += esComodin ? 7 : 5;
+          } else {
+            const rOf = resultado(o.marcador1, o.marcador2);
+            const rPr = resultado(p.marcador1, p.marcador2);
+
+            if (rOf === rPr) {
+              puntosJornada += esComodin ? 4 : 3;
+            }
+          }
+        });
+
+        resultadosTotales[j.nombre][jornada.nombre] = puntosJornada;
+        totalPuntos += puntosJornada;
+      }
+
+      resultadosTotales[j.nombre].total = totalPuntos;
     }
 
-    resultadosTotales[j.nombre]['Campeón Mundial'] = puntosCampeon;
-    totalPuntos += puntosCampeon;
+    res.json(resultadosTotales);
 
-
-    resultadosTotales[j.nombre].total = totalPuntos;
+  } catch (error) {
+    console.error('Error calculando resultados totales:', error);
+    res.status(500).json({ error: 'Error calculando resultados totales.' });
   }
-
-  res.json(resultadosTotales);
 });
+
+
 
 app.get('/generar_reporte', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'generar_reporte.html'));

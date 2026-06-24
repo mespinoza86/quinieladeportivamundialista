@@ -4,14 +4,9 @@ document.addEventListener("DOMContentLoaded", async function () {
         const verResultadosBtn = document.getElementById('ver-resultados-btn');
         const resultadosCards = document.getElementById('resultados-cards');
 
-        const resultadosResponse = await fetch('/api/resultados');
-        const resultadosData = await resultadosResponse.json();
-
-        const oficialesResponse = await fetch('/api/resultados-oficiales');
-        const oficialesData = await oficialesResponse.json();
-
-        const jornadasResponse = await fetch('/api/jornadas');
-        const jornadasData = await jornadasResponse.json();
+        const resultadosData = await fetch('/api/resultados').then(r => r.json());
+        const oficialesData = await fetch('/api/resultados-oficiales').then(r => r.json());
+        const jornadasData = await fetch('/api/jornadas').then(r => r.json());
 
         function jornadaEstaCerrada(jornada) {
             if (!jornada.fechaCierre) return true;
@@ -42,7 +37,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             mostrarMensaje('No hay jornadas cerradas todavía. No puedes ver resultados aún.');
         }
 
-        function intentarMostrarJornadaSeleccionada() {
+        async function intentarMostrarJornadaSeleccionada() {
             const selectedOption = jornadaSelect.options[jornadaSelect.selectedIndex];
 
             if (!selectedOption || selectedOption.dataset.cerrada !== 'true') {
@@ -56,11 +51,11 @@ document.addEventListener("DOMContentLoaded", async function () {
         verResultadosBtn.addEventListener('click', intentarMostrarJornadaSeleccionada);
         jornadaSelect.addEventListener('change', intentarMostrarJornadaSeleccionada);
 
-        document.getElementById('volver-btn-top').addEventListener('click', function () {
+        document.getElementById('volver-btn-top').addEventListener('click', () => {
             window.location.href = '/index.html';
         });
 
-        document.getElementById('volver-btn-bottom').addEventListener('click', function () {
+        document.getElementById('volver-btn-bottom').addEventListener('click', () => {
             window.location.href = '/index.html';
         });
 
@@ -205,23 +200,31 @@ function mostrarResultados(jornada, resultadosData, oficialesData) {
             const oficialMarcador1 = partidoOficial ? marcador(partidoOficial.marcador1) : '-';
             const oficialMarcador2 = partidoOficial ? marcador(partidoOficial.marcador2) : '-';
 
+            const esComodin = !!data.partido.comodin;
+
             const card = document.createElement('article');
-            card.className = 'match-card';
+            card.className = `match-card ${esComodin ? 'match-card-comodin' : ''}`;
 
             card.innerHTML = `
-                <div class="match-main">
-                    <div class="match-left">
-                        <div class="match-title">${data.partido.equipo1} vs ${data.partido.equipo2}</div>
-                    </div>
+                <div class="match-card-header">
+                    ${esComodin ? '<span class="match-comodin-badge">⭐ COMODÍN</span>' : ''}
 
-                    <div class="match-score">
-                        <span>${oficialEquipo1}</span>
-                        <strong>${oficialMarcador1} - ${oficialMarcador2}</strong>
-                        <span>${oficialEquipo2}</span>
-                    </div>
+                    <div class="match-main">
+                        <div class="match-left">
+                            <div class="match-title ${esComodin ? 'match-title-comodin' : ''}">
+                                ${data.partido.equipo1} vs ${data.partido.equipo2}
+                            </div>
+                        </div>
 
-                    <div class="match-status">
-                        ${partidoOficial ? estadoPartidoHTML(partidoOficial) : '<span class="status-pill">N/A</span>'}
+                        <div class="match-score">
+                            <span>${oficialEquipo1}</span>
+                            <strong>${oficialMarcador1} - ${oficialMarcador2}</strong>
+                            <span>${oficialEquipo2}</span>
+                        </div>
+
+                        <div class="match-status">
+                            ${partidoOficial ? estadoPartidoHTML(partidoOficial) : '<span class="status-pill">N/A</span>'}
+                        </div>
                     </div>
                 </div>
 

@@ -60,17 +60,18 @@ function estadoPartidoHTML(partido) {
 
         if (resultados && resultados.partidos && resultados.partidos.length) {
             resultadosOficialesContainer.innerHTML = resultados.partidos.map(partido => `
-            <div class="match-card resultado official-result-card">
+            <div class="match-card resultado official-result-card ${partido.comodin ? 'official-card-comodin' : ''}">
 
-                <div class="official-status-column">
-                    <span>${partido.comodin ? 'Comodín' : 'Normal'}</span>
-                    ${estadoPartidoHTML(partido)}
-                </div>
+            <div class="official-status-column">
+                ${partido.comodin ? '<span class="official-comodin-badge">⭐ COMODÍN</span>' : '<span>Normal</span>'}
+                ${estadoPartidoHTML(partido)}
+            </div>
+
 
                 <div class="match-teams official-teams-column">
                     <div class="team-side">
                         ${logoHTML(partido.logoEquipo1, partido.equipo1)}
-                        <strong>${partido.equipo1}</strong>
+                        <strong class="${partido.comodin ? 'official-team-comodin' : ''}">${partido.equipo1}</strong>
                     </div>
 
                     <span class="match-score">
@@ -79,7 +80,7 @@ function estadoPartidoHTML(partido) {
 
                     <div class="team-side">
                         ${logoHTML(partido.logoEquipo2, partido.equipo2)}
-                        <strong>${partido.equipo2}</strong>
+                        <strong class="${partido.comodin ? 'official-team-comodin' : ''}">${partido.equipo2}</strong>
                     </div>
                 </div>
 

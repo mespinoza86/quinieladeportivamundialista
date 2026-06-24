@@ -1467,3 +1467,183 @@ button + button {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+.trivia-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+
+.trivia-checks label {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-weight: 700;
+}
+
+.trivias-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 18px 0;
+}
+
+.trivia-match-card {
+  padding: 16px;
+  border-radius: 20px;
+  background: #042312;
+  color: #fff;
+}
+
+.trivia-match-card h3 {
+  margin: 0 0 14px;
+  font-size: 1rem;
+  color: #ffdf32;
+}
+
+.trivia-question-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.08);
+  margin-bottom: 12px;
+}
+
+.trivia-question-card p {
+  margin: 0 0 10px;
+  font-weight: 800;
+}
+
+.trivia-question-card select {
+  width: 100%;
+}
+
+.trivia-match-card {
+  margin-bottom: 18px;
+}
+
+.trivia-question-card select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+#infoCierreTrivia {
+  margin-bottom: 18px;
+}
+
+.trivia-results-detail {
+  padding: 12px;
+}
+
+.trivia-result-block {
+  min-width: 620px;
+  margin-bottom: 18px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.05);
+  overflow: hidden;
+}
+
+.trivia-result-question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  color: #ffffff;
+  background: rgba(0,0,0,0.18);
+}
+
+.trivia-result-question strong {
+  color: #ffdf32;
+}
+
+.trivia-result-question span {
+  font-weight: 700;
+}
+
+.trivia-header {
+  margin-top: 0;
+}
+
+@media (max-width: 700px) {
+  .trivia-results-detail {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .trivia-result-block {
+    min-width: 620px;
+  }
+}
+
+.trivia-match-comodin {
+  border: 2px solid #ffd92e;
+  box-shadow: 0 0 0 3px rgba(255, 217, 46, 0.14);
+}
+
+.trivia-title-comodin {
+  font-weight: 900;
+  color: #ffd92e !important;
+}
+
+.trivia-match-card .comodin-badge {
+  display: inline-block;
+  margin-bottom: 10px;
+}
+
+.match-card-header {
+  width: 100%;
+  display: block;
+}
+
+.match-card-header .match-comodin-badge {
+  position: static !important;
+  display: inline-flex !important;
+  width: fit-content;
+  margin: 0 0 10px 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #ffd92e;
+  color: #06170d;
+  font-weight: 900;
+  font-size: 0.78rem;
+  line-height: 1;
+  transform: none !important;
+  inset: auto !important;
+}
+
+.match-card-comodin {
+  border: 2px solid #ffd92e;
+  box-shadow: 0 0 0 3px rgba(255, 217, 46, 0.14);
+}
+
+.match-title-comodin {
+  color: #ffd92e !important;
+  font-weight: 900;
+}
+
+.official-card-comodin {
+  border: 2px solid #ffd92e;
+  box-shadow: 0 0 0 3px rgba(255, 217, 46, 0.14);
+}
+
+.official-comodin-badge {
+  position: static !important;
+  display: inline-flex !important;
+  width: fit-content;
+  margin: 0 0 8px 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #ffd92e;
+  color: #06170d;
+  font-weight: 900;
+  font-size: 0.78rem;
+  line-height: 1;
+  transform: none !important;
+  inset: auto !important;
+}
+
+.official-team-comodin {
+  color: #ffd92e !important;
+  font-weight: 900;
+}
