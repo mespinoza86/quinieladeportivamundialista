@@ -48,6 +48,23 @@ document.addEventListener("DOMContentLoaded", async function () {
             mostrarResultados(jornadaSelect.value, resultadosData, oficialesData);
         }
 
+
+        async function refrescarResultadosActuales() {
+    const selectedOption = jornadaSelect.options[jornadaSelect.selectedIndex];
+
+    if (!selectedOption || selectedOption.dataset.cerrada !== 'true') return;
+
+    const resultadosDataNuevo = await fetch('/api/resultados').then(r => r.json());
+    const oficialesDataNuevo = await fetch('/api/resultados-oficiales').then(r => r.json());
+
+    mostrarResultados(jornadaSelect.value, resultadosDataNuevo, oficialesDataNuevo);
+}
+
+
+
+
+
+
         verResultadosBtn.addEventListener('click', intentarMostrarJornadaSeleccionada);
         jornadaSelect.addEventListener('change', intentarMostrarJornadaSeleccionada);
 
@@ -58,6 +75,9 @@ document.addEventListener("DOMContentLoaded", async function () {
         document.getElementById('volver-btn-bottom').addEventListener('click', () => {
             window.location.href = '/index.html';
         });
+
+        setInterval(refrescarResultadosActuales, 30000);
+        
 
     } catch (error) {
         console.error("Error al cargar los datos:", error);

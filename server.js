@@ -88,7 +88,7 @@ let syncEnProceso = false;
 
 app.use((req, res, next) => {
   const ahora = Date.now();
-  const CINCO_MINUTOS = 1 * 60 * 1000;
+  const CINCO_MINUTOS = 1 * 30 * 1000;
 
   const esArchivoEstatico =
     req.path.startsWith('/js/') ||
@@ -2452,6 +2452,75 @@ app.get('/api/resultados-totales', async (req, res) => {
   }
 });
 
+////////////borrar borrar
+
+app.get('/api/debug/jornadas', async (req, res) => {
+  const jornadas = await Jornada.find({});
+  res.json(jornadas);
+});
+
+app.get('/api/admin/debug-partido-api/:matchId', requireAdmin, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+
+    if (!process.env.APIFOOTBALL_COM_KEY) {
+      return res.status(500).json({
+        error: 'Falta configurar APIFOOTBALL_COM_KEY en el .env'
+      });
+    }
+
+    const evento = await buscarEventoPorId(matchId);
+
+    if (!evento) {
+      return res.status(404).json({
+        error: 'APIFootball no devolvió evento para ese matchId.',
+        matchId
+      });
+    }
+
+    const estadoCalculado = obtenerEstadoPartido(evento, {
+      apiStatus: evento.match_status
+    });
+
+    res.json({
+      matchId,
+      ahoraServidor: new Date(),
+      partido: {
+        local: evento.match_hometeam_name,
+        visitante: evento.match_awayteam_name,
+        marcador: `${evento.match_hometeam_score} - ${evento.match_awayteam_score}`,
+        match_status_api: evento.match_status,
+        match_live_api: evento.match_live,
+        estadoCalculado
+      },
+      camposImportantes: {
+        match_date: evento.match_date,
+        match_time: evento.match_time,
+        match_hometeam_score: evento.match_hometeam_score,
+        match_awayteam_score: evento.match_awayteam_score,
+        match_hometeam_ft_score: evento.match_hometeam_ft_score,
+        match_awayteam_ft_score: evento.match_awayteam_ft_score,
+        match_hometeam_extra_score: evento.match_hometeam_extra_score,
+        match_awayteam_extra_score: evento.match_awayteam_extra_score,
+        match_hometeam_penalty_score: evento.match_hometeam_penalty_score,
+        match_awayteam_penalty_score: evento.match_awayteam_penalty_score
+      },
+      raw: evento
+    });
+
+  } catch (error) {
+    console.error('Error debug partido API:', error.response?.data || error.message);
+
+    res.status(500).json({
+      error: 'Error consultando partido en APIFootball.',
+      detalle: error.response?.data || error.message
+    });
+  }
+});
+
+
+
+//////////////////////
 
 
 app.get('/generar_reporte', (req, res) => {

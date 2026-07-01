@@ -105,11 +105,18 @@ function estadoPartidoHTML(partido) {
             const resultadosResponse = await fetch('/api/resultados-oficiales');
             resultadosOficialesCache = await resultadosResponse.json();
 
+
+
             if (jornadas.length > 0) {
-                const ultimaJornada = jornadas[jornadas.length - 1].nombre;
-                jornadaSelect.value = ultimaJornada;
-                renderizarResultados(ultimaJornada);
-            } else {
+                const jornadaActual = jornadaSelect.value || jornadas[jornadas.length - 1].nombre;
+
+                jornadaSelect.innerHTML = jornadas
+                .map(j => `<option value="${j.nombre}">${j.nombre}</option>`)
+                .join('');
+
+            jornadaSelect.value = jornadaActual;
+            renderizarResultados(jornadaActual);
+        }else {
                 resultadosOficialesContainer.innerHTML = '<p>No hay jornadas registradas.</p>';
             }
 
@@ -128,4 +135,8 @@ function estadoPartidoHTML(partido) {
     });
 
     cargarDatosIniciales();
+    setInterval(() => {
+    cargarDatosIniciales();
+    }, 30000);
+
 });
