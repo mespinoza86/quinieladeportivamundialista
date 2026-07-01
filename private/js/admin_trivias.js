@@ -15,7 +15,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   { tipo: 'mas_rojas', pregunta: '¿Qué equipo tendrá más tarjetas rojas?' },
   { tipo: 'ambos_anotan', pregunta: '¿Ambos equipos anotan?' },
   { tipo: 'gol_primer_tiempo', pregunta: '¿Habrá gol en el primer tiempo?' },
-  { tipo: 'gol_segundo_tiempo', pregunta: '¿Habrá gol en el segundo tiempo?' }
+  { tipo: 'gol_segundo_tiempo', pregunta: '¿Habrá gol en el segundo tiempo?' },
+  { tipo: 'hubo_tiempo_extra', pregunta: '¿Habrá tiempo extra?' },
+  { tipo: 'hubo_penales', pregunta: '¿Habrá penales?' }
 ];
 
 

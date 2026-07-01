@@ -310,8 +310,15 @@ const TIPOS_TRIVIA = {
   },
   gol_segundo_tiempo: {
     pregunta: '¿Habrá gol en el segundo tiempo?'
+  },
+  hubo_tiempo_extra: {
+    pregunta: '¿Habrá tiempo extra?'
+  },
+  hubo_penales: {
+    pregunta: '¿Habrá penales?'
   }
 };
+
 
 
 function opcionesTrivia(tipo, equipo1, equipo2) {
@@ -337,6 +344,14 @@ function opcionesTrivia(tipo, equipo1, equipo2) {
   }
 
   if (tipo === 'gol_segundo_tiempo') {
+    return ['Sí', 'No'];
+  }
+
+  if (tipo === 'hubo_tiempo_extra') {
+    return ['Sí', 'No'];
+  }
+
+  if (tipo === 'hubo_penales') {
     return ['Sí', 'No'];
   }
 
@@ -1154,9 +1169,12 @@ app.get('/api/tipos-trivia', (req, res) => {
     { tipo: 'mas_rojas', pregunta: TIPOS_TRIVIA.mas_rojas.pregunta },
     { tipo: 'ambos_anotan', pregunta: TIPOS_TRIVIA.ambos_anotan.pregunta },
     { tipo: 'gol_primer_tiempo', pregunta: TIPOS_TRIVIA.gol_primer_tiempo.pregunta },
-    { tipo: 'gol_segundo_tiempo', pregunta: TIPOS_TRIVIA.gol_segundo_tiempo.pregunta }
+    { tipo: 'gol_segundo_tiempo', pregunta: TIPOS_TRIVIA.gol_segundo_tiempo.pregunta },
+    { tipo: 'hubo_tiempo_extra', pregunta: TIPOS_TRIVIA.hubo_tiempo_extra.pregunta },
+    { tipo: 'hubo_penales', pregunta: TIPOS_TRIVIA.hubo_penales.pregunta }
   ]);
 });
+
 
 
 
@@ -1454,6 +1472,52 @@ app.get('/api/trivias/latest', async (req, res) => {
 });
 
 
+function tieneValorApi(valor) {
+  return valor !== undefined && valor !== null && String(valor).trim() !== '';
+}
+
+function huboTiempoExtra(evento) {
+  const estado = String(evento?.match_status || '').toLowerCase();
+
+  if (estado.includes('after et')) return true;
+  if (estado.includes('after pen')) return true;
+
+  if (
+    tieneValorApi(evento?.match_hometeam_extra_score) ||
+    tieneValorApi(evento?.match_awayteam_extra_score)
+  ) {
+    return true;
+  }
+
+  const goles = Array.isArray(evento?.goalscorer) ? evento.goalscorer : [];
+  const tarjetas = Array.isArray(evento?.cards) ? evento.cards : [];
+
+  const huboEventoExtra = [...goles, ...tarjetas].some(item =>
+    String(item.score_info_time || '').toLowerCase().includes('extra time')
+  );
+
+  return huboEventoExtra;
+}
+
+function huboPenales(evento) {
+  const estado = String(evento?.match_status || '').toLowerCase();
+
+  if (estado.includes('after pen')) return true;
+
+  if (
+    tieneValorApi(evento?.match_hometeam_penalty_score) ||
+    tieneValorApi(evento?.match_awayteam_penalty_score)
+  ) {
+    return true;
+  }
+
+  const goles = Array.isArray(evento?.goalscorer) ? evento.goalscorer : [];
+
+  return goles.some(gol =>
+    String(gol.score_info_time || '').toLowerCase() === 'penalty'
+  );
+}
+
 
 /////// api trivias ///////
 app.get('/api/trivias', async (req, res) => {
@@ -1586,8 +1650,12 @@ function minutoApiFootball(item) {
   return Number.isNaN(n) ? 999 : n;
 }
 
+
 function esGolApiFootball(gol) {
   const info = String(gol?.info || '').toLowerCase();
+  const scoreInfoTime = String(gol?.score_info_time || '').toLowerCase();
+
+  if (scoreInfoTime === 'penalty') return false;
 
   if (info.includes('cancel')) return false;
   if (info.includes('disallow')) return false;
@@ -1595,6 +1663,7 @@ function esGolApiFootball(gol) {
 
   return Boolean(gol?.home_scorer || gol?.away_scorer);
 }
+
 
 function obtenerGolesValidos(evento) {
   return Array.isArray(evento.goalscorer)
@@ -1767,6 +1836,16 @@ if (trivia.tipo === 'gol_segundo_tiempo') {
 
   return hayGolSegundoTiempo ? 'Sí' : 'No';
 }
+
+if (trivia.tipo === 'hubo_tiempo_extra') {
+  return huboTiempoExtra(evento) ? 'Sí' : 'No';
+}
+
+if (trivia.tipo === 'hubo_penales') {
+  return huboPenales(evento) ? 'Sí' : 'No';
+}
+
+
 
   return '';
 }
