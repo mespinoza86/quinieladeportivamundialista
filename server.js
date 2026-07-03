@@ -698,6 +698,7 @@ function obtenerNumeroSeguro(valor) {
   return Number.isNaN(numero) ? '' : numero;
 }
 
+/*
 function obtenerMarcador90Minutos(fixture) {
   const posiblesLocal = [
     fixture.match_hometeam_ft_score,
@@ -718,6 +719,44 @@ function obtenerMarcador90Minutos(fixture) {
     marcador2: obtenerNumeroSeguro(posiblesVisitante.find(v => v !== undefined && v !== null && v !== ''))
   };
 }
+*/
+
+function obtenerMarcador90Minutos(fixture) {
+  const ftHome = obtenerNumeroSeguro(fixture.match_hometeam_ft_score);
+  const ftAway = obtenerNumeroSeguro(fixture.match_awayteam_ft_score);
+
+  if (ftHome !== '' && ftAway !== '') {
+    return { marcador1: ftHome, marcador2: ftAway };
+  }
+
+  const goles = Array.isArray(fixture.goalscorer) ? fixture.goalscorer : [];
+
+  const golesRegulares = goles.filter(gol => {
+    const periodo = String(gol.score_info_time || '').toLowerCase();
+    const info = String(gol.info || '').toLowerCase();
+
+    if (periodo === 'penalty') return false;
+    if (info.includes('penalty')) return false;
+
+    return gol.score && /^\d+\s*-\s*\d+$/.test(gol.score);
+  });
+
+  if (golesRegulares.length > 0) {
+    const ultimoGol = golesRegulares[golesRegulares.length - 1];
+    const [home, away] = ultimoGol.score.split('-').map(n => Number(n.trim()));
+
+    return {
+      marcador1: Number.isNaN(home) ? '' : home,
+      marcador2: Number.isNaN(away) ? '' : away
+    };
+  }
+
+  return {
+    marcador1: obtenerNumeroSeguro(fixture.match_hometeam_score),
+    marcador2: obtenerNumeroSeguro(fixture.match_awayteam_score)
+  };
+}
+
 
 function normalizarEquipo(nombre) {
   return (nombre || '')
