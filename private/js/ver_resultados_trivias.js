@@ -36,6 +36,18 @@ function estadoPartidoHTML(partido) {
   return `<span class="status-pill status-scheduled">${formatearFecha(partido.fecha)}</span>`;
 }
 
+function partidoYaInicio(trivia) {
+  if (['LIVE', 'MT', 'TC'].includes(trivia.estado)) return true;
+
+  if (!trivia.fecha) return false;
+
+  const fecha = new Date(String(trivia.fecha).replace(' ', 'T'));
+
+  if (Number.isNaN(fecha.getTime())) return false;
+
+  return fecha <= new Date();
+}
+
 document.addEventListener("DOMContentLoaded", async function () {
   const jornadaSelect = document.getElementById('jornada-select');
   const verResultadosBtn = document.getElementById('ver-resultados-btn');
@@ -61,28 +73,13 @@ document.addEventListener("DOMContentLoaded", async function () {
       const option = document.createElement('option');
       option.value = jornada.jornadaNombre;
       option.textContent = jornada.jornadaNombre;
-      option.dataset.cerrada = jornada.cerrada ? 'true' : 'false';
       jornadaSelect.appendChild(option);
     });
 
-    const jornadasCerradas = jornadasTrivia.filter(j => j.cerrada);
-
-    if (jornadasCerradas.length > 0) {
-      const ultimaCerrada = jornadasCerradas[jornadasCerradas.length - 1].jornadaNombre;
-      jornadaSelect.value = ultimaCerrada;
-      await mostrarResultadosTrivia(ultimaCerrada);
-    } else {
-      mostrarMensaje('No hay trivias cerradas todavía. No puedes ver resultados aún.');
-    }
+    jornadaSelect.value = jornadasTrivia[jornadasTrivia.length - 1].jornadaNombre;
+    await mostrarResultadosTrivia(jornadaSelect.value);
 
     async function intentarMostrarJornadaSeleccionada() {
-      const selectedOption = jornadaSelect.options[jornadaSelect.selectedIndex];
-
-      if (!selectedOption || selectedOption.dataset.cerrada !== 'true') {
-        mostrarMensaje('La trivia de esta jornada aún no ha cerrado, por lo tanto no puedes ver estos resultados aún.');
-        return;
-      }
-
       await mostrarResultadosTrivia(jornadaSelect.value);
     }
 
@@ -98,12 +95,10 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
 
     setInterval(async () => {
-      const selectedOption = jornadaSelect.options[jornadaSelect.selectedIndex];
-
-      if (!selectedOption || selectedOption.dataset.cerrada !== 'true') return;
-
-      await mostrarResultadosTrivia(jornadaSelect.value);
-    }, 60000);
+      if (jornadaSelect.value) {
+        await mostrarResultadosTrivia(jornadaSelect.value);
+      }
+    }, 30000);
 
   } catch (error) {
     console.error('Error cargando resultados de trivias:', error);
@@ -124,13 +119,20 @@ async function mostrarResultadosTrivia(jornadaNombre) {
   }
 
   if (!data.trivias || data.trivias.length === 0) {
-    resultadosCards.innerHTML = `<div class="resultados-mensaje">No hay resultados de trivias para esta jornada.</div>`;
+    resultadosCards.innerHTML = `<div class="resultados-mensaje">Todavía no hay partidos de trivia iniciados o cerrados para esta jornada.</div>`;
+    return;
+  }
+
+  const triviasVisibles = data.trivias.filter(partidoYaInicio);
+
+  if (triviasVisibles.length === 0) {
+    resultadosCards.innerHTML = `<div class="resultados-mensaje">Todavía no hay partidos de trivia iniciados o cerrados para esta jornada.</div>`;
     return;
   }
 
   const partidosMap = new Map();
 
-  data.trivias.forEach(trivia => {
+  triviasVisibles.forEach(trivia => {
     const key = `${trivia.partidoIndex}_${trivia.equipo1}_vs_${trivia.equipo2}`;
 
     if (!partidosMap.has(key)) {
@@ -163,6 +165,9 @@ async function mostrarResultadosTrivia(jornadaNombre) {
       <div class="match-main">
         <div class="match-left">
           <div class="match-title">${partido.equipo1} vs ${partido.equipo2}</div>
+          <div class="match-meta">
+            <span>📅 ${formatearFecha(partido.fecha)}</span>
+          </div>
         </div>
 
         <div class="match-score">

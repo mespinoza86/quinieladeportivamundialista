@@ -23,9 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const d = new Date(fecha);
 
-        if (Number.isNaN(d.getTime())) {
-            return fecha;
-        }
+        if (Number.isNaN(d.getTime())) return fecha;
 
         return d.toLocaleString('es-CR', {
             timeZone: 'America/Costa_Rica',
@@ -34,30 +32,64 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function formatearFechaPartido(apiDate) {
+        if (!apiDate) return 'Fecha no disponible';
+
+        const fecha = new Date(String(apiDate).replace(' ', 'T'));
+
+        if (Number.isNaN(fecha.getTime())) return apiDate;
+
+        return fecha.toLocaleString('es-CR', {
+            timeZone: 'America/Costa_Rica',
+            dateStyle: 'short',
+            timeStyle: 'short'
+        });
+    }
+
+    function partidoYaCerro(partidoBase, partidoOficial) {
+        if (partidoOficial && ['LIVE', 'MT', 'TC'].includes(partidoOficial.estado)) {
+            return true;
+        }
+
+        if (!partidoBase?.apiDate) return false;
+
+        const fecha = new Date(String(partidoBase.apiDate).replace(' ', 'T'));
+
+        if (Number.isNaN(fecha.getTime())) return false;
+
+        return fecha <= new Date();
+    }
+
     function estadoPartidoHTML(partido) {
-    if (!partido) return '';
+        if (!partido) return '';
 
-    if (partido.estado === 'TC') {
-        return `<span class="status-pill status-finished">TC</span>`;
+        if (partido.estado === 'TC') {
+            return `<span class="status-pill status-finished">TC</span>`;
+        }
+
+        if (partido.estado === 'MT') {
+            return `<span class="status-pill status-live">
+                <span class="live-dot"></span>
+                MT
+            </span>`;
+        }
+
+        if (partido.estado === 'LIVE' && partido.minuto) {
+            return `<span class="status-pill status-live">
+                <span class="live-dot"></span>
+                ${partido.minuto}${String(partido.minuto).includes('+') ? '' : "'"}
+            </span>`;
+        }
+
+        return `<span class="status-pill status-scheduled">${formatearFecha(partido.fecha)}</span>`;
     }
 
-    if (partido.estado === 'MT') {
-        return `<span class="status-pill status-live">
-            <span class="live-dot"></span>
-            MT
-        </span>`;
+    function buscarOficialPorPartido(partidosOficiales, partidoBase) {
+        return partidosOficiales.find(partido =>
+            (partido.equipo1 === partidoBase.equipo1 && partido.equipo2 === partidoBase.equipo2) ||
+            (partido.equipo1 === partidoBase.equipo2 && partido.equipo2 === partidoBase.equipo1)
+        );
     }
-
-    if (partido.estado === 'LIVE' && partido.minuto) {
-        return `<span class="status-pill status-live">
-            <span class="live-dot"></span>
-            ${partido.minuto}${String(partido.minuto).includes('+') ? '' : "'"}
-        </span>`;
-    }
-
-    return `<span class="status-pill status-scheduled">${formatearFecha(partido.fecha)}</span>`;
-}
-
 
     function calcularPuntos(pronostico, resultadoOficial) {
         if (!pronostico || !resultadoOficial) return 0;
@@ -161,6 +193,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function obtenerJornada(jornadaNombre) {
+        const res = await fetch(`/api/jornadas/${encodeURIComponent(jornadaNombre)}`);
+        if (!res.ok) return null;
+        return await res.json();
+    }
+
     async function buscarResultados() {
         const jugador = jugadorSelect.value;
         const jornada = jornadaSelect.value;
@@ -208,6 +246,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            const jornadaData = await obtenerJornada(jornada);
+            const partidosJornada = jornadaData?.partidos || [];
+
             const oficialesResponse = await fetch('/api/resultados-oficiales');
             const resultadosOficiales = await oficialesResponse.json();
 
@@ -220,12 +261,21 @@ document.addEventListener('DOMContentLoaded', () => {
             resultadosContainer.innerHTML = '';
 
             let totalPuntos = 0;
+            let partidosMostrados = 0;
 
-            partidos.forEach(partidoPronosticado => {
-                const resultadoOficialCorrespondiente = partidosOficiales.find(partido =>
-                    partido.equipo1 === partidoPronosticado.equipo1 &&
-                    partido.equipo2 === partidoPronosticado.equipo2
+            partidos.forEach((partidoPronosticado, index) => {
+                const partidoBase = partidosJornada[index] || partidoPronosticado;
+
+                const resultadoOficialCorrespondiente = buscarOficialPorPartido(
+                    partidosOficiales,
+                    partidoBase
                 );
+
+                if (!partidoYaCerro(partidoBase, resultadoOficialCorrespondiente)) {
+                    return;
+                }
+
+                partidosMostrados++;
 
                 const puntos = calcularPuntos(partidoPronosticado, resultadoOficialCorrespondiente);
                 totalPuntos += puntos;
@@ -239,7 +289,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 const partidoDiv = document.createElement('div');
                 partidoDiv.classList.add('match-card', 'resultado');
 
+                if (resultadoOficialCorrespondiente?.comodin || partidoBase?.comodin) {
+                    partidoDiv.classList.add('match-card-comodin');
+                }
+
                 partidoDiv.innerHTML = `
+                    <div class="match-card-header">
+                        ${(resultadoOficialCorrespondiente?.comodin || partidoBase?.comodin) ? '<span class="match-comodin-badge">⭐ COMODÍN</span>' : ''}
+
+                        <div class="match-main">
+                            <div class="match-left">
+                                <div class="match-title ${(resultadoOficialCorrespondiente?.comodin || partidoBase?.comodin) ? 'match-title-comodin' : ''}">
+                                    ${partidoPronosticado.equipo1} vs ${partidoPronosticado.equipo2}
+                                </div>
+
+                                <div class="match-meta">
+                                    <span>📅 ${formatearFechaPartido(partidoBase.apiDate)}</span>
+                                </div>
+                            </div>
+
+                            <div class="match-score">
+                                <span>Pronóstico</span>
+                                <strong>${partidoPronosticado.marcador1 ?? '-'} - ${partidoPronosticado.marcador2 ?? '-'}</strong>
+                                <span>Oficial: ${oficialTexto}</span>
+                            </div>
+
+                            <div class="match-status">
+                                ${resultadoOficialCorrespondiente ? estadoPartidoHTML(resultadoOficialCorrespondiente) : '<span class="status-pill status-finished">Cerrado</span>'}
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="match-teams">
                         <div class="team-side">
                             ${logoHTML(partidoPronosticado.logoEquipo1, partidoPronosticado.equipo1)}
@@ -247,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
 
                         <span class="match-score">
-                            ${partidoPronosticado.marcador1} - ${partidoPronosticado.marcador2}
+                            ${partidoPronosticado.marcador1 ?? '-'} - ${partidoPronosticado.marcador2 ?? '-'}
                         </span>
 
                         <div class="team-side">
@@ -258,16 +338,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     <div class="match-meta">
                         <span>Oficial: ${oficialTexto}</span>
-                        ${estadoPartidoHTML(resultadoOficialCorrespondiente)}
                         <span>Puntos: ${puntos}</span>
-                        ${resultadoOficialCorrespondiente?.comodin ? '<span>Comodín</span>' : ''}
                     </div>
                 `;
 
                 resultadosContainer.appendChild(partidoDiv);
             });
 
-            totalPuntosContainer.innerHTML = `<h3>Total de Puntos Obtenidos: ${totalPuntos}</h3>`;
+            if (partidosMostrados === 0) {
+                resultadosContainer.innerHTML = 'Todavía no hay partidos cerrados para mostrar en esta jornada.';
+                totalPuntosContainer.innerHTML = '';
+                return;
+            }
+
+            totalPuntosContainer.innerHTML = `<h3>Total de Puntos Obtenidos en partidos visibles: ${totalPuntos}</h3>`;
 
         } catch (error) {
             console.error('Error al buscar resultados:', error);
@@ -288,6 +372,12 @@ document.addEventListener('DOMContentLoaded', () => {
             buscarResultados();
         }
     });
+
+    setInterval(() => {
+        if (jugadorSelect.value && jornadaSelect.value) {
+            buscarResultados();
+        }
+    }, 30000);
 
     async function iniciar() {
         await loadJugadores();

@@ -4,17 +4,26 @@ document.addEventListener("DOMContentLoaded", async function () {
         const verResultadosBtn = document.getElementById('ver-resultados-btn');
         const resultadosCards = document.getElementById('resultados-cards');
 
-        const resultadosData = await fetch('/api/resultados').then(r => r.json());
-        const oficialesData = await fetch('/api/resultados-oficiales').then(r => r.json());
-        const jornadasData = await fetch('/api/jornadas').then(r => r.json());
-
-        function jornadaEstaCerrada(jornada) {
-            if (!jornada.fechaCierre) return true;
-            return new Date(jornada.fechaCierre) <= new Date();
-        }
+        let resultadosData = await fetch('/api/resultados').then(r => r.json());
+        let oficialesData = await fetch('/api/resultados-oficiales').then(r => r.json());
+        let jornadasData = await fetch('/api/jornadas').then(r => r.json());
 
         function mostrarMensaje(mensaje) {
             resultadosCards.innerHTML = `<div class="resultados-mensaje">${mensaje}</div>`;
+        }
+
+        function jornadaTienePartidosCerrados(jornada) {
+            if (!jornada || !Array.isArray(jornada.partidos)) return false;
+
+            return jornada.partidos.some(partido => {
+                if (!partido.apiDate) return false;
+
+                const fecha = new Date(String(partido.apiDate).replace(' ', 'T'));
+
+                if (Number.isNaN(fecha.getTime())) return false;
+
+                return fecha <= new Date();
+            });
         }
 
         jornadaSelect.innerHTML = '';
@@ -23,47 +32,43 @@ document.addEventListener("DOMContentLoaded", async function () {
             const option = document.createElement('option');
             option.value = jornada.nombre;
             option.textContent = jornada.nombre;
-            option.dataset.cerrada = jornadaEstaCerrada(jornada) ? 'true' : 'false';
+            option.dataset.cerrada = jornadaTienePartidosCerrados(jornada) ? 'true' : 'false';
             jornadaSelect.appendChild(option);
         });
 
-        const jornadasCerradas = jornadasData.filter(jornadaEstaCerrada);
+        const jornadasConPartidosCerrados = jornadasData.filter(jornadaTienePartidosCerrados);
 
-        if (jornadasCerradas.length > 0) {
-            const ultimaJornadaCerrada = jornadasCerradas[jornadasCerradas.length - 1].nombre;
-            jornadaSelect.value = ultimaJornadaCerrada;
-            mostrarResultados(ultimaJornadaCerrada, resultadosData, oficialesData);
+        if (jornadasConPartidosCerrados.length > 0) {
+            const ultimaJornada = jornadasConPartidosCerrados[jornadasConPartidosCerrados.length - 1].nombre;
+            jornadaSelect.value = ultimaJornada;
+            mostrarResultados(ultimaJornada, resultadosData, oficialesData);
         } else {
-            mostrarMensaje('No hay jornadas cerradas todavía. No puedes ver resultados aún.');
+            mostrarMensaje('Todavía no hay partidos cerrados para mostrar.');
         }
 
         async function intentarMostrarJornadaSeleccionada() {
             const selectedOption = jornadaSelect.options[jornadaSelect.selectedIndex];
 
             if (!selectedOption || selectedOption.dataset.cerrada !== 'true') {
-                mostrarMensaje('La jornada aún no ha cerrado, por lo tanto no puedes ver estos resultados aún.');
+                mostrarMensaje('Todavía no hay partidos cerrados en esta jornada.');
                 return;
             }
 
             mostrarResultados(jornadaSelect.value, resultadosData, oficialesData);
         }
 
-
         async function refrescarResultadosActuales() {
-    const selectedOption = jornadaSelect.options[jornadaSelect.selectedIndex];
+            resultadosData = await fetch('/api/resultados').then(r => r.json());
+            oficialesData = await fetch('/api/resultados-oficiales').then(r => r.json());
+            jornadasData = await fetch('/api/jornadas').then(r => r.json());
 
-    if (!selectedOption || selectedOption.dataset.cerrada !== 'true') return;
+            const jornadaSeleccionada = jornadaSelect.value;
+            const jornadaActual = jornadasData.find(j => j.nombre === jornadaSeleccionada);
 
-    const resultadosDataNuevo = await fetch('/api/resultados').then(r => r.json());
-    const oficialesDataNuevo = await fetch('/api/resultados-oficiales').then(r => r.json());
+            if (!jornadaActual || !jornadaTienePartidosCerrados(jornadaActual)) return;
 
-    mostrarResultados(jornadaSelect.value, resultadosDataNuevo, oficialesDataNuevo);
-}
-
-
-
-
-
+            mostrarResultados(jornadaSeleccionada, resultadosData, oficialesData);
+        }
 
         verResultadosBtn.addEventListener('click', intentarMostrarJornadaSeleccionada);
         jornadaSelect.addEventListener('change', intentarMostrarJornadaSeleccionada);
@@ -77,7 +82,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         });
 
         setInterval(refrescarResultadosActuales, 30000);
-        
 
     } catch (error) {
         console.error("Error al cargar los datos:", error);
@@ -107,6 +111,20 @@ function formatearFecha(fecha) {
     if (Number.isNaN(d.getTime())) return fecha;
 
     return d.toLocaleString('es-CR', {
+        timeZone: 'America/Costa_Rica',
+        dateStyle: 'short',
+        timeStyle: 'short'
+    });
+}
+
+function formatearFechaPartido(apiDate) {
+    if (!apiDate) return 'Fecha no disponible';
+
+    const fecha = new Date(String(apiDate).replace(' ', 'T'));
+
+    if (Number.isNaN(fecha.getTime())) return apiDate;
+
+    return fecha.toLocaleString('es-CR', {
         timeZone: 'America/Costa_Rica',
         dateStyle: 'short',
         timeStyle: 'short'
@@ -156,6 +174,20 @@ function normalizarOficial(partidoOficial, partidoBase) {
     };
 }
 
+function partidoYaCerro(partidoBase, partidoOficial) {
+    if (partidoOficial && ['LIVE', 'MT', 'TC'].includes(partidoOficial.estado)) {
+        return true;
+    }
+
+    if (!partidoBase.apiDate) return false;
+
+    const fecha = new Date(String(partidoBase.apiDate).replace(' ', 'T'));
+
+    if (Number.isNaN(fecha.getTime())) return false;
+
+    return fecha <= new Date();
+}
+
 function mostrarResultados(jornada, resultadosData, oficialesData) {
     const resultadosCards = document.getElementById('resultados-cards');
     resultadosCards.innerHTML = '';
@@ -181,12 +213,16 @@ function mostrarResultados(jornada, resultadosData, oficialesData) {
                 const partidoBase = partidosJornada[index];
                 if (!partidoBase) return;
 
+                const partidoOficialRaw = buscarOficialPorPartido(resultadosOficiales, partidoBase);
+                const partidoOficial = normalizarOficial(partidoOficialRaw, partidoBase);
+
+                if (!partidoYaCerro(partidoBase, partidoOficial)) {
+                    return;
+                }
+
                 const partidoClave = `${partidoBase.equipo1} vs ${partidoBase.equipo2}`;
 
                 if (!partidosMap.has(partidoClave)) {
-                    const partidoOficialRaw = buscarOficialPorPartido(resultadosOficiales, partidoBase);
-                    const partidoOficial = normalizarOficial(partidoOficialRaw, partidoBase);
-
                     partidosMap.set(partidoClave, {
                         jugadores: [],
                         partido: partidoBase,
@@ -203,7 +239,7 @@ function mostrarResultados(jornada, resultadosData, oficialesData) {
         });
 
         if (partidosMap.size === 0) {
-            resultadosCards.innerHTML = `<div class="resultados-mensaje">No hay resultados para esta jornada.</div>`;
+            resultadosCards.innerHTML = `<div class="resultados-mensaje">Todavía no hay partidos cerrados para mostrar en esta jornada.</div>`;
             return;
         }
 
@@ -234,6 +270,10 @@ function mostrarResultados(jornada, resultadosData, oficialesData) {
                             <div class="match-title ${esComodin ? 'match-title-comodin' : ''}">
                                 ${data.partido.equipo1} vs ${data.partido.equipo2}
                             </div>
+
+                            <div class="match-meta">
+                                <span>📅 ${formatearFechaPartido(data.partido.apiDate)}</span>
+                            </div>
                         </div>
 
                         <div class="match-score">
@@ -243,7 +283,7 @@ function mostrarResultados(jornada, resultadosData, oficialesData) {
                         </div>
 
                         <div class="match-status">
-                            ${partidoOficial ? estadoPartidoHTML(partidoOficial) : '<span class="status-pill">N/A</span>'}
+                            ${partidoOficial ? estadoPartidoHTML(partidoOficial) : '<span class="status-pill status-finished">Cerrado</span>'}
                         </div>
                     </div>
                 </div>
@@ -269,7 +309,7 @@ function mostrarResultados(jornada, resultadosData, oficialesData) {
                         return `
                             <div class="player-row">
                                 <span>${jugador.nombreJugador}</span>
-                                <span>${data.partido.equipo1} ${jugador.marcador1} - ${jugador.marcador2} ${data.partido.equipo2}</span>
+                                <span>${data.partido.equipo1} ${marcador(jugador.marcador1)} - ${marcador(jugador.marcador2)} ${data.partido.equipo2}</span>
                                 <span>${puntosObtenidos}</span>
                             </div>
                         `;

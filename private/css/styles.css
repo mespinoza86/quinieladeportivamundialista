@@ -1647,3 +1647,37 @@ button + button {
   color: #ffd92e !important;
   font-weight: 900;
 }
+
+/* Inputs de marcadores bloqueados */
+/*
+.partido-container input:disabled {
+    background-color: #ececec;
+    color: #666;
+    border: 1px solid #cfcfcf;
+    cursor: not-allowed;
+    opacity: 1;       
+}
+*/
+
+
+/* Chrome / Edge */
+
+.partido-container input:disabled::-webkit-input-placeholder {
+    color: #999;
+}
+
+/* Firefox */
+
+.partido-container input:disabled::placeholder {
+    color: #999;
+}
+
+.partido-container input:disabled {
+    background: #b1afaf;
+    color: #555;
+    border: 1px solid #bdbdbd;
+    font-weight: bold;
+    opacity: 1;
+    cursor: not-allowed;
+}
+

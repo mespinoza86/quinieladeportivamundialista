@@ -10,8 +10,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   let trivias = [];
   let jornadaTrivia = null;
   let jugadorValidado = null;
-  let fechaCierreGlobal = null;
-  let intervaloContador = null;
+  let jornadaData = null;
+  let oficialesJornada = [];
+  let intervaloContadores = null;
 
   await cargarJugadores();
   await cargarUltimaTrivia();
@@ -48,54 +49,152 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     trivias = data.trivias;
     jornadaTrivia = data.jornadaNombre;
-    fechaCierreGlobal = data.fechaCierre;
 
     tituloTrivia.textContent = `Trivia - ${jornadaTrivia}`;
-    subtituloTrivia.textContent = 'Las preguntas se muestran siempre. Para guardar, selecciona tu jugador y valida la contraseña.';
+    subtituloTrivia.textContent = 'Puedes modificar solo las trivias de partidos que aún no han iniciado.';
 
-    mostrarInfoCierre(fechaCierreGlobal);
-    pintarTrivias([]);
-  }
-
-  function mostrarInfoCierre(fechaCierre) {
-    if (!fechaCierre) {
-      infoCierreTrivia.innerHTML = '';
-      return;
-    }
-
-    const fecha = new Date(fechaCierre);
+    await cargarDatosJornadaYOficiales();
 
     infoCierreTrivia.innerHTML = `
       <div>
-        <strong>Cierre de trivia:</strong>
-        ${fecha.toLocaleDateString()}
-        ${fecha.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </div>
-
-      <div>
-        <strong>Tiempo restante:</strong>
-        <span id="contadorTrivia"></span>
+        <strong>Cierre por partido:</strong>
+        cada trivia se bloquea cuando inicia su partido.
       </div>
     `;
 
-    if (intervaloContador) clearInterval(intervaloContador);
+    pintarTrivias([]);
+  }
 
-    intervaloContador = setInterval(() => {
-      const contador = document.getElementById('contadorTrivia');
-      if (!contador) return;
+  async function cargarDatosJornadaYOficiales() {
+    jornadaData = null;
+    oficialesJornada = [];
 
-      const ahora = new Date();
-      const diff = fecha - ahora;
+    try {
+      const jornadaRes = await fetch(`/api/jornadas/${encodeURIComponent(jornadaTrivia)}`);
+      if (jornadaRes.ok) {
+        jornadaData = await jornadaRes.json();
+      }
 
-      if (diff > 0) {
-        const horas = Math.floor(diff / (1000 * 60 * 60));
+      const oficialesRes = await fetch('/api/resultados-oficiales');
+      const oficialesData = await oficialesRes.json();
+
+      const oficial = oficialesData.find(o => o.nombre === jornadaTrivia);
+      oficialesJornada = oficial ? oficial.partidos : [];
+    } catch (error) {
+      console.error('Error cargando jornada/oficiales:', error);
+    }
+  }
+
+  function obtenerPartidoBase(trivia) {
+    return jornadaData?.partidos?.[Number(trivia.partidoIndex)] || null;
+  }
+
+  function buscarOficial(partidoBase, trivia) {
+    if (!partidoBase && !trivia) return null;
+
+    const equipo1 = partidoBase?.equipo1 || trivia?.equipo1;
+    const equipo2 = partidoBase?.equipo2 || trivia?.equipo2;
+
+    return oficialesJornada.find(o =>
+      (o.equipo1 === equipo1 && o.equipo2 === equipo2) ||
+      (o.equipo1 === equipo2 && o.equipo2 === equipo1)
+    );
+  }
+
+  function obtenerFechaPartido(apiDate) {
+    if (!apiDate) return null;
+
+    const fecha = new Date(String(apiDate).replace(' ', 'T'));
+
+    if (Number.isNaN(fecha.getTime())) return null;
+
+    return fecha;
+  }
+
+  function formatearFechaPartido(apiDate) {
+    const fecha = obtenerFechaPartido(apiDate);
+
+    if (!fecha) return 'Fecha no disponible';
+
+    return fecha.toLocaleString('es-CR', {
+      timeZone: 'America/Costa_Rica',
+      dateStyle: 'short',
+      timeStyle: 'short'
+    });
+  }
+
+  function triviaBloqueada(trivia) {
+    const partidoBase = obtenerPartidoBase(trivia);
+    const oficial = buscarOficial(partidoBase, trivia);
+
+    if (oficial && ['LIVE', 'MT', 'TC'].includes(oficial.estado)) {
+      return true;
+    }
+
+    const fecha = obtenerFechaPartido(partidoBase?.apiDate);
+
+    if (!fecha) return false;
+
+    return fecha <= new Date();
+  }
+
+  function estadoTriviaHTML(trivia) {
+    const partidoBase = obtenerPartidoBase(trivia);
+    const bloqueada = triviaBloqueada(trivia);
+    const fecha = obtenerFechaPartido(partidoBase?.apiDate);
+
+    if (bloqueada) {
+      return `
+        <div class="match-meta" style="justify-content:center; margin-bottom:10px;">
+          <span>📅 ${formatearFechaPartido(partidoBase?.apiDate)}</span>
+          <span class="status-pill status-finished">🔒 Trivia cerrada</span>
+        </div>
+      `;
+    }
+
+    if (!fecha) {
+      return `
+        <div class="match-meta" style="justify-content:center; margin-bottom:10px;">
+          <span>📅 Fecha no disponible</span>
+          <span class="status-pill status-scheduled">Disponible</span>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="match-meta" style="justify-content:center; margin-bottom:10px;">
+        <span>📅 ${formatearFechaPartido(partidoBase?.apiDate)}</span>
+        <span class="status-pill status-scheduled">Disponible</span>
+        <span>
+          ⏳ Cierra en:
+          <strong class="contador-trivia-partido" data-fecha="${fecha.toISOString()}"></strong>
+        </span>
+      </div>
+    `;
+  }
+
+  function iniciarContadores() {
+    if (intervaloContadores) clearInterval(intervaloContadores);
+
+    intervaloContadores = setInterval(() => {
+      document.querySelectorAll('.contador-trivia-partido').forEach(span => {
+        const fecha = new Date(span.dataset.fecha);
+        const diff = fecha - new Date();
+
+        if (diff <= 0) {
+          span.textContent = 'Trivia cerrada';
+          return;
+        }
+
+        const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const horas = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const segundos = Math.floor((diff % (1000 * 60)) / 1000);
 
-        contador.textContent = `${horas}h ${minutos}m ${segundos}s`;
-      } else {
-        contador.textContent = 'Trivia cerrada';
-      }
+        span.textContent = dias > 0
+          ? `${dias}d ${horas}h ${minutos}m ${segundos}s`
+          : `${horas}h ${minutos}m ${segundos}s`;
+      });
     }, 1000);
   }
 
@@ -165,24 +264,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     const grupos = {};
 
     trivias.forEach(trivia => {
-      const key = `${trivia.equipo1} vs ${trivia.equipo2}`;
-      if (!grupos[key]) grupos[key] = [];
-      grupos[key].push(trivia);
+      const key = `${trivia.partidoIndex}_${trivia.equipo1} vs ${trivia.equipo2}`;
+
+      if (!grupos[key]) {
+        grupos[key] = {
+          titulo: `${trivia.equipo1} vs ${trivia.equipo2}`,
+          trivias: []
+        };
+      }
+
+      grupos[key].trivias.push(trivia);
     });
 
-    triviasContainer.innerHTML = Object.keys(grupos).map(titulo => {
-      return `
-        <div class="trivia-match-card">
-          <h3>${titulo}</h3>
+    triviasContainer.innerHTML = Object.keys(grupos).map(key => {
+      const grupo = grupos[key];
+      const primeraTrivia = grupo.trivias[0];
+      const partidoCerrado = triviaBloqueada(primeraTrivia);
 
-          ${grupos[titulo].map(trivia => {
+      return `
+        <div class="trivia-match-card ${partidoCerrado ? 'partido-cerrado' : ''}">
+          ${estadoTriviaHTML(primeraTrivia)}
+
+          <h3>${grupo.titulo}</h3>
+
+          ${grupo.trivias.map(trivia => {
             const previa = respuestaPrevia(respuestasPrevias, trivia._id);
+            const bloqueada = triviaBloqueada(trivia);
 
             return `
               <div class="trivia-question-card">
                 <p>${trivia.pregunta}</p>
 
-                <select class="respuesta-trivia" data-trivia-id="${trivia._id}">
+                <select
+                  class="respuesta-trivia"
+                  data-trivia-id="${trivia._id}"
+                  ${bloqueada ? 'disabled' : ''}
+                >
                   <option value="">Seleccione respuesta</option>
                   ${trivia.opciones.map(opcion => `
                     <option value="${opcion}" ${previa === opcion ? 'selected' : ''}>
@@ -196,11 +313,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
       `;
     }).join('');
+
+    iniciarContadores();
   }
 
   function limpiarRespuestas() {
     document.querySelectorAll('.respuesta-trivia').forEach(select => {
-      select.value = '';
+      if (!select.disabled) {
+        select.value = '';
+      }
     });
   }
 
@@ -253,11 +374,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    if (fechaCierreGlobal && new Date(fechaCierreGlobal) <= new Date()) {
-      alert('Error, la trivia ya está cerrada.');
-      return;
-    }
-
     const jugador = jugadorSelect.value;
 
     if (!jugador) {
@@ -270,7 +386,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    const respuestas = Array.from(document.querySelectorAll('.respuesta-trivia'))
+    const selectsEditables = Array.from(document.querySelectorAll('.respuesta-trivia'))
+      .filter(select => !select.disabled);
+
+    const respuestas = selectsEditables
       .map(select => ({
         triviaId: select.dataset.triviaId,
         respuesta: select.value
@@ -278,15 +397,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       .filter(item => item.respuesta);
 
     if (respuestas.length === 0) {
-      alert('Debe responder al menos una trivia.');
+      alert('Debe responder al menos una trivia abierta.');
       return;
     }
 
-    const faltantes = document.querySelectorAll('.respuesta-trivia').length - respuestas.length;
+    const faltantes = selectsEditables.length - respuestas.length;
 
     if (faltantes > 0) {
       const continuar = confirm(
-        'Faltan trivias por responder.\n\n¿Está seguro que desea guardar?'
+        'Faltan trivias abiertas por responder.\n\n¿Está seguro que desea guardar?'
       );
 
       if (!continuar) return;
@@ -307,5 +426,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     alert('Trivias guardadas correctamente.');
     mensaje.textContent = data.mensaje || 'Trivias guardadas correctamente.';
+
+    await cargarRespuestasGuardadas(jugador);
   }
 });

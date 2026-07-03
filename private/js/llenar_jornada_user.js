@@ -101,8 +101,8 @@ function loadPartidos(nombreJornada) {
             if (!jornada) {
                 console.error("Jornada no encontrada:", nombreJornada);
                 return;
-            }
-            mostrarPartidos(jornada.partidos, jornada.fechaCierre);
+            }            
+            mostrarPartidos(jornada.partidos, jornada.fechaCierre, jornada.nombre);
         })
         .catch(error => console.error('Error al cargar los partidos:', error));
 }
@@ -112,7 +112,68 @@ function logoHTML(url, nombre) {
     return `<img src="${url}" class="team-logo" alt="${nombre || 'Equipo'}">`;
 }
 
-function mostrarPartidos(partidos, fechaCierre) {
+function formatearFechaPartido(apiDate) {
+    if (!apiDate) return 'Fecha no disponible';
+
+    const fecha = new Date(String(apiDate).replace(' ', 'T'));
+
+    if (Number.isNaN(fecha.getTime())) {
+        return apiDate;
+    }
+
+    return fecha.toLocaleString('es-CR', {
+        timeZone: 'America/Costa_Rica',
+        dateStyle: 'short',
+        timeStyle: 'short'
+    });
+}
+
+function fechaPartidoYaPaso(apiDate) {
+    if (!apiDate) return false;
+
+    const fecha = new Date(String(apiDate).replace(' ', 'T'));
+
+    if (Number.isNaN(fecha.getTime())) return false;
+
+    return fecha <= new Date();
+}
+
+function obtenerFechaPartido(apiDate) {
+    if (!apiDate) return null;
+
+    const fecha = new Date(String(apiDate).replace(' ', 'T'));
+
+    if (Number.isNaN(fecha.getTime())) return null;
+
+    return fecha;
+}
+
+function iniciarContadoresPartidos() {
+    setInterval(() => {
+        document.querySelectorAll('.contador-partido').forEach(span => {
+            const fechaCierre = new Date(span.dataset.fecha);
+            const diff = fechaCierre - new Date();
+
+            if (diff <= 0) {
+                span.textContent = 'Partido cerrado';
+                return;
+            }
+
+            const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const horas = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const segundos = Math.floor((diff % (1000 * 60)) / 1000);
+
+            span.textContent = dias > 0
+                ? `${dias}d ${horas}h ${minutos}m ${segundos}s`
+                : `${horas}h ${minutos}m ${segundos}s`;
+        });
+    }, 1000);
+}
+
+
+      
+async function mostrarPartidos(partidos, fechaCierre, nombreJornada) {
     const partidosContainer = document.getElementById('partidosContainer');
     partidosContainer.innerHTML = '';
 
@@ -160,6 +221,41 @@ function mostrarPartidos(partidos, fechaCierre) {
         }, 1000);
     }
 
+    let oficialesJornada = [];
+
+try {
+  const oficialesRes = await fetch('/api/resultados-oficiales');
+  const oficialesData = await oficialesRes.json();
+  const oficial = oficialesData.find(o => o.nombre === nombreJornada);
+  oficialesJornada = oficial ? oficial.partidos : [];
+} catch (e) {
+  console.error('Error cargando oficiales:', e);
+}
+
+function buscarOficial(partido) {
+  return oficialesJornada.find(o =>
+    (o.equipo1 === partido.equipo1 && o.equipo2 === partido.equipo2) ||
+    (o.equipo1 === partido.equipo2 && o.equipo2 === partido.equipo1)
+  );
+}
+
+function partidoBloqueado(partido) {
+  const oficial = buscarOficial(partido);
+
+  if (oficial && ['LIVE', 'MT', 'TC'].includes(oficial.estado)) return true;
+
+  if (!partido.apiDate) return false;
+
+  const fecha = new Date(String(partido.apiDate).replace(' ', 'T'));
+  if (Number.isNaN(fecha.getTime())) return false;
+
+  return fecha <= new Date();
+}
+
+    
+    
+    iniciarContadoresPartidos();
+
     partidos.forEach((partido, i) => {
         const partidoDiv = document.createElement('div');
 
@@ -177,8 +273,44 @@ function mostrarPartidos(partidos, fechaCierre) {
         const estiloNegrita = partido.comodin
             ? 'font-weight: bold;'
             : '';
+        
+        const bloqueado = partidoBloqueado(partido);
+        const fechaPaso = fechaPartidoYaPaso(partido.apiDate);
+
+        if (bloqueado || fechaPaso) {
+    partidoDiv.classList.add('partido-cerrado');
+}
+
+
+const textoBloqueo = bloqueado || fechaPaso
+    ? '<div class="status-pill status-finished">🔒 Partido cerrado</div>'
+    : '<div class="status-pill status-scheduled">Disponible</div>';
+
+const fechaPartido = obtenerFechaPartido(partido.apiDate);
+
+const contadorHTML = !bloqueado && !fechaPaso && fechaPartido
+    ? `
+        <span>
+            ⏳ Cierra en:
+            <strong class="contador-partido" data-fecha="${fechaPartido.toISOString()}"></strong>
+        </span>
+      `
+    : '';
+
+const fechaPartidoHTML = `
+    <div class="match-meta" style="justify-content:center; margin-bottom:10px;">
+        <span>📅 ${formatearFechaPartido(partido.apiDate)}</span>
+        ${textoBloqueo}
+        ${contadorHTML}
+    </div>
+`;
+
+
+
+
 
         partidoDiv.innerHTML = `
+           ${fechaPartidoHTML}
             <div class="match-teams">
                 ${partido.comodin ? '<div class="comodin-badge">⭐ COMODÍN</div>' : ''}
 
@@ -191,18 +323,20 @@ function mostrarPartidos(partidos, fechaCierre) {
                 </div>
 
                 <input
-                    type="text"
-                    id="resultadoEquipo1_${i}"
-                >
+                type="text"
+                id="resultadoEquipo1_${i}"
+                ${bloqueado ? 'disabled' : ''}
+>
 
                 <label style="${estiloNegrita}">
                     vs
                 </label>
 
-                <input
-                    type="text"
-                    id="resultadoEquipo2_${i}"
-                >
+            <input
+            type="text"
+            id="resultadoEquipo2_${i}"
+            ${bloqueado ? 'disabled' : ''}
+>
 
                 <div class="team-side">
                     ${logoHTML(partido.logoEquipo2, partido.equipo2)}
@@ -378,13 +512,7 @@ async function guardarResultados(jornada, fechaCierre, jugadorValidado) {
     }
 
     // 1. Verificar fecha cierre
-    if (fechaCierre) {
-        const ahora = new Date();
-        if (new Date(fechaCierre) <= ahora) {
-            alert("Error, la hora de cierre de la jornada ya ha pasado");
-            return;
-        }
-    }
+    
 
     if (jugador !== jugadorValidado) {
         alert("Debe seleccionar el jugador y validar la contraseña antes de guardar.");
@@ -401,8 +529,17 @@ async function guardarResultados(jornada, fechaCierre, jugadorValidado) {
     Array.from(document.querySelectorAll('.partido-container')).forEach((partidoDiv, index) => {
         const inputs = partidoDiv.querySelectorAll('input');
     
-        const marcador1 = inputs[0].value.trim();
-        const marcador2 = inputs[1].value.trim();
+        if (inputs[0].disabled || inputs[1].disabled) {
+    pronosticos.push({
+        marcador1: '',
+        marcador2: ''
+    });
+    return;
+}
+
+const marcador1 = inputs[0].value.trim();
+const marcador2 = inputs[1].value.trim();
+
 
         // Si uno de los dos está vacío
         if (marcador1 === '' || marcador2 === '') {
