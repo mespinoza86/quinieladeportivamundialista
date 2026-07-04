@@ -41,6 +41,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  
+  function datetimeLocalCostaRicaToISO(valor) {
+  if (!valor) return null;
+
+  // valor viene tipo: 2026-07-03T14:00
+  // Lo forzamos a Costa Rica UTC-6
+  const fecha = new Date(`${valor}:00-06:00`);
+
+  return Number.isNaN(fecha.getTime()) ? null : fecha.toISOString();
+}
+
+function convertirADatetimeLocal(fecha) {
+  const d = new Date(fecha);
+
+  if (Number.isNaN(d.getTime())) return '';
+
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Costa_Rica',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(d);
+
+  const get = tipo => partes.find(p => p.type === tipo)?.value;
+
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+}
+
   async function cargarTriviasDeJornada() {
     mensaje.textContent = '';
     partidosTriviaContainer.innerHTML = '';
@@ -167,9 +198,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function fechaCierreEsValida() {
-    if (!fechaCierre.value) return false;
-    return new Date(fechaCierre.value) > new Date();
-  }
+  const iso = datetimeLocalCostaRicaToISO(fechaCierre.value);
+  if (!iso) return false;
+
+  return new Date(iso) > new Date();
+}
+
 
   async function guardarCambios() {
     mensaje.textContent = '';
@@ -209,9 +243,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fechaCierre: fechaCierre.value,
-          configuracion
-        })
+        fechaCierre: datetimeLocalCostaRicaToISO(fechaCierre.value),
+        configuracion
+    })
+
       });
 
       if (res.redirected) {

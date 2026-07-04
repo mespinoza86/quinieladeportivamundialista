@@ -102,14 +102,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function obtenerFechaPartido(apiDate) {
-    if (!apiDate) return null;
+  if (!apiDate) return null;
 
-    const fecha = new Date(String(apiDate).replace(' ', 'T'));
+  const raw = String(apiDate).trim();
 
-    if (Number.isNaN(fecha.getTime())) return null;
-
-    return fecha;
+  // Si algún día viene con zona horaria incluida
+  // respetamos esa zona
+  if (raw.includes('T') && /Z|[+-]\d{2}:\d{2}$/.test(raw)) {
+    const fecha = new Date(raw);
+    return Number.isNaN(fecha.getTime()) ? null : fecha;
   }
+
+  // apiDate viene de APIFootball como hora Costa Rica
+  const limpio = raw.replace(' ', 'T');
+
+  const fecha = new Date(`${limpio}:00-06:00`);
+
+  if (Number.isNaN(fecha.getTime())) {
+    return null;
+  }
+
+  return fecha;
+}
+
 
   function formatearFechaPartido(apiDate) {
     const fecha = obtenerFechaPartido(apiDate);

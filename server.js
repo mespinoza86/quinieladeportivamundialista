@@ -734,9 +734,12 @@ function obtenerMarcador90Minutos(fixture) {
   const golesRegulares = goles.filter(gol => {
     const periodo = String(gol.score_info_time || '').toLowerCase();
     const info = String(gol.info || '').toLowerCase();
-
+    
+    
     if (periodo === 'penalty') return false;
+    if (periodo.includes('extra time')) return false;
     if (info.includes('penalty')) return false;
+
 
     return gol.score && /^\d+\s*-\s*\d+$/.test(gol.score);
   });
