@@ -1245,6 +1245,61 @@ app.post('/api/resultados', async (req, res) => {
 });
 
 
+app.post('/api/admin/resultados', requireAdmin, async (req, res) => {
+  try {
+    const { jugador, jornada, pronosticos } = req.body;
+
+    if (!jugador || !jornada || !Array.isArray(pronosticos)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Datos inválidos.'
+      });
+    }
+
+    const jornadaDoc = await Jornada.findOne({ nombre: jornada });
+
+    if (!jornadaDoc) {
+      return res.status(404).json({
+        success: false,
+        error: 'Jornada no encontrada.'
+      });
+    }
+
+    const pronosticosFinales = jornadaDoc.partidos.map((partido, index) => {
+      const nuevo = pronosticos[index] || {};
+
+      return {
+        equipo1: partido.equipo1,
+        equipo2: partido.equipo2,
+        marcador1: nuevo.marcador1 === '' || nuevo.marcador1 === null || nuevo.marcador1 === undefined
+          ? null
+          : Number(nuevo.marcador1),
+        marcador2: nuevo.marcador2 === '' || nuevo.marcador2 === null || nuevo.marcador2 === undefined
+          ? null
+          : Number(nuevo.marcador2)
+      };
+    });
+
+    await Resultado.findOneAndUpdate(
+      { jugador, jornada },
+      { jugador, jornada, pronosticos: pronosticosFinales },
+      { upsert: true, new: true }
+    );
+
+    res.json({
+      success: true,
+      mensaje: 'Resultados guardados correctamente desde modo admin.'
+    });
+
+  } catch (error) {
+    console.error('Error guardando resultados admin:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error guardando resultados admin.'
+    });
+  }
+});
+
 app.get('/api/resultados/:jugador/:jornada', async (req, res) => {
   const { jugador, jornada } = req.params;
   const r = await Resultado.findOne({ jugador, jornada });

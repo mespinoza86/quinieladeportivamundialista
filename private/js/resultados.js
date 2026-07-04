@@ -196,15 +196,26 @@ function updateScoreInputs(resultados) {
             });
         });
 
-        fetch('/api/resultados', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jugador, jornada, pronosticos })
-        })
-        .then(response => response.json())
-        .then(() => {
-            alert('Resultados guardados correctamente.');
-        });
+        fetch('/api/admin/resultados', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jugador, jornada, pronosticos })
+})
+.then(async response => {
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+        alert(data.error || 'No se pudieron guardar los resultados.');
+        return;
+    }
+
+    alert(data.mensaje || 'Resultados guardados correctamente.');
+})
+.catch(error => {
+    console.error('Error guardando resultados:', error);
+    alert('Error guardando resultados.');
+});
+
     });
 
     loadJugadores();
