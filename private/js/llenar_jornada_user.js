@@ -129,24 +129,16 @@ function formatearFechaPartido(apiDate) {
 }
 
 function fechaPartidoYaPaso(apiDate) {
-    if (!apiDate) return false;
-
-    const fecha = new Date(String(apiDate).replace(' ', 'T'));
-
-    if (Number.isNaN(fecha.getTime())) return false;
-
+    const fecha = parseFechaPartidoCostaRica(apiDate);
+    if (!fecha) return false;
     return fecha <= new Date();
 }
 
 function obtenerFechaPartido(apiDate) {
-    if (!apiDate) return null;
-
-    const fecha = new Date(String(apiDate).replace(' ', 'T'));
-
-    if (Number.isNaN(fecha.getTime())) return null;
-
-    return fecha;
+    return parseFechaPartidoCostaRica(apiDate);
 }
+
+
 
 function iniciarContadoresPartidos() {
     setInterval(() => {
@@ -169,6 +161,22 @@ function iniciarContadoresPartidos() {
                 : `${horas}h ${minutos}m ${segundos}s`;
         });
     }, 1000);
+}
+
+function parseFechaPartidoCostaRica(apiDate) {
+    if (!apiDate) return null;
+
+    const raw = String(apiDate).trim();
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+
+    if (!match) {
+        const fallback = new Date(raw);
+        return Number.isNaN(fallback.getTime()) ? null : fallback;
+    }
+
+    const [, year, month, day, hour, minute] = match.map(Number);
+
+    return new Date(Date.UTC(year, month - 1, day, hour + 6, minute, 0));
 }
 
 
@@ -246,8 +254,10 @@ function partidoBloqueado(partido) {
 
   if (!partido.apiDate) return false;
 
-  const fecha = new Date(String(partido.apiDate).replace(' ', 'T'));
-  if (Number.isNaN(fecha.getTime())) return false;
+  const fecha = parseFechaPartidoCostaRica(partido.apiDate)
+
+  
+  if (!fecha || Number.isNaN(fecha.getTime())) return false;
 
   return fecha <= new Date();
 }
@@ -585,11 +595,22 @@ const marcador2 = inputs[1].value.trim();
 
 
     // 5. Guardar en backend
-    await fetch('/api/resultados', {
-        method: 'POST',
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jugador, jornada, pronosticos })
-    });
+    const res = await fetch('/api/resultados', {
+    method: 'POST',
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jugador, jornada, pronosticos })
+});
 
-    alert("Revise en Resultados Pronosticados por Jugador que sus resultados son los correctos.\n Resultados guardados correctamente");
+const data = await res.json();
+
+if (!res.ok || !data.success) {
+    alert(data.error || "No se pudieron guardar los resultados.");
+    return;
+}
+
+await cargarResultadosGuardados(jugador, jornada);
+
+alert(data.mensaje || "Resultados guardados correctamente.");
+
+
 }

@@ -1119,18 +1119,50 @@ app.get('/api/resultados', async (req, res) => {
 
 
 
+function parseFechaPartidoCostaRica(apiDate) {
+  if (!apiDate) return null;
+
+  const raw = String(apiDate).trim();
+
+  // Formatos esperados:
+  // "2026-07-04 13:00"
+  // "2026-07-04T13:00"
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+
+  if (!match) {
+    const fallback = new Date(raw);
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  }
+
+  const [, year, month, day, hour, minute] = match.map(Number);
+
+  // Costa Rica es UTC-6 todo el año
+  return new Date(Date.UTC(year, month - 1, day, hour + 6, minute, 0));
+}
+
+function partidoYaInicio(partido, oficial = null) {
+  if (oficial && ['LIVE', 'MT', 'TC'].includes(oficial.estado)) {
+    return true;
+  }
+
+  const fecha = parseFechaPartidoCostaRica(partido.apiDate);
+  if (!fecha) return false;
+
+  return fecha <= new Date();
+}
+
 app.post('/api/resultados', async (req, res) => {
   try {
     const { jugador, jornada, pronosticos } = req.body;
 
     if (!jugador || !jornada || !Array.isArray(pronosticos)) {
-      return res.status(400).json({ error: 'Datos inválidos.' });
+      return res.status(400).json({ success: false, error: 'Datos inválidos.' });
     }
 
     const jornadaDoc = await Jornada.findOne({ nombre: jornada });
 
     if (!jornadaDoc) {
-      return res.status(404).json({ error: 'Jornada no encontrada.' });
+      return res.status(404).json({ success: false, error: 'Jornada no encontrada.' });
     }
 
     const oficialDoc = await ResultadoOficial.findOne({ jornada });
@@ -1139,11 +1171,16 @@ app.post('/api/resultados', async (req, res) => {
     const resultadoExistente = await Resultado.findOne({ jugador, jornada });
     const pronosticosActuales = resultadoExistente ? resultadoExistente.pronosticos : [];
 
+    let guardados = 0;
+    let bloqueados = 0;
+
     const pronosticosFinales = jornadaDoc.partidos.map((partido, index) => {
       const oficial = buscarOficialCorrespondiente(resultadosOficiales, partido);
       const bloqueado = partidoYaInicio(partido, oficial);
 
       if (bloqueado) {
+        bloqueados++;
+
         return pronosticosActuales[index] || {
           equipo1: partido.equipo1,
           equipo2: partido.equipo2,
@@ -1154,11 +1191,28 @@ app.post('/api/resultados', async (req, res) => {
 
       const nuevo = pronosticos[index] || {};
 
+      const marcador1 = nuevo.marcador1 === '' || nuevo.marcador1 === null || nuevo.marcador1 === undefined
+        ? null
+        : Number(nuevo.marcador1);
+
+      const marcador2 = nuevo.marcador2 === '' || nuevo.marcador2 === null || nuevo.marcador2 === undefined
+        ? null
+        : Number(nuevo.marcador2);
+
+      if (
+        (marcador1 !== null && Number.isNaN(marcador1)) ||
+        (marcador2 !== null && Number.isNaN(marcador2))
+      ) {
+        throw new Error(`Marcador inválido en partido ${index + 1}`);
+      }
+
+      guardados++;
+
       return {
         equipo1: partido.equipo1,
         equipo2: partido.equipo2,
-        marcador1: nuevo.marcador1 === '' ? null : Number(nuevo.marcador1),
-        marcador2: nuevo.marcador2 === '' ? null : Number(nuevo.marcador2)
+        marcador1,
+        marcador2
       };
     });
 
@@ -1175,16 +1229,20 @@ app.post('/api/resultados', async (req, res) => {
 
     res.json({
       success: true,
-      mensaje: 'Resultados guardados correctamente.',
+      mensaje: `Resultados guardados correctamente. Partidos actualizados: ${guardados}. Partidos bloqueados: ${bloqueados}.`,
+      guardados,
+      bloqueados,
       resultados: Array.from(resultMap.entries())
     });
 
   } catch (error) {
     console.error('Error guardando resultados:', error);
-    res.status(500).json({ error: 'Error guardando resultados.' });
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error guardando resultados.'
+    });
   }
 });
-
 
 
 app.get('/api/resultados/:jugador/:jornada', async (req, res) => {
