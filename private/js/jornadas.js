@@ -25,6 +25,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const actualizarFechaCierreButton = document.getElementById('actualizarFechaCierreButton');
 
     const fechaInputEl = document.getElementById('fechaCierreInput');
+    const buscarApiFechaInput = document.getElementById('buscarApiFechaInput');
+const buscarApiTextoInput = document.getElementById('buscarApiTextoInput');
+const buscarPartidosApiButton = document.getElementById('buscarPartidosApiButton');
+const partidosApiModificarContainer = document.getElementById('partidosApiModificarContainer');
+const buscarApiTorneoSelect = document.getElementById('buscarApiTorneoSelect');
+const buscarApiCustomBox = document.getElementById('buscarApiCustomBox');
+
+let partidosApiDisponibles = [];
+
 
     if (fechaInputEl) {
         const today = new Date().toISOString().split('T')[0];
@@ -57,6 +66,369 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         return map;
     }
+
+
+function normalizarTexto(texto) {
+    return (texto || '')
+        .toString()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+}
+
+    function traducirEquipo(nombre) {
+        const traducciones = {
+    // CONCACAF
+    "Costa Rica": "Costa Rica",
+    "Mexico": "México",
+    "Canada": "Canadá",
+    "United States": "Estados Unidos",
+    "USA": "Estados Unidos",
+    "Panama": "Panamá",
+    "Jamaica": "Jamaica",
+    "Honduras": "Honduras",
+    "El Salvador": "El Salvador",
+    "Guatemala": "Guatemala",
+    "Nicaragua": "Nicaragua",
+    "Belize": "Belice",
+    "Cuba": "Cuba",
+    "Haiti": "Haití",
+    "Trinidad & Tobago": "Trinidad y Tobago",
+    "Dominican Republic": "República Dominicana",
+    "Puerto Rico": "Puerto Rico",
+    "Curacao": "Curazao",
+    "Aruba": "Aruba",
+    "Suriname": "Surinam",
+    "Guyana": "Guyana",
+
+    // CONMEBOL
+    "Argentina": "Argentina",
+    "Brazil": "Brasil",
+    "Uruguay": "Uruguay",
+    "Paraguay": "Paraguay",
+    "Chile": "Chile",
+    "Bolivia": "Bolivia",
+    "Peru": "Perú",
+    "Colombia": "Colombia",
+    "Ecuador": "Ecuador",
+    "Venezuela": "Venezuela",
+
+    // UEFA
+    "Spain": "España",
+    "Portugal": "Portugal",
+    "France": "Francia",
+    "Germany": "Alemania",
+    "Italy": "Italia",
+    "England": "Inglaterra",
+    "Scotland": "Escocia",
+    "Wales": "Gales",
+    "Northern Ireland": "Irlanda del Norte",
+    "Ireland": "Irlanda",
+    "Netherlands": "Países Bajos",
+    "Belgium": "Bélgica",
+    "Switzerland": "Suiza",
+    "Austria": "Austria",
+    "Poland": "Polonia",
+    "Ukraine": "Ucrania",
+    "Czech Republic": "República Checa",
+    "Slovakia": "Eslovaquia",
+    "Slovenia": "Eslovenia",
+    "Croatia": "Croacia",
+    "Bosnia and Herzegovina": "Bosnia y Herzegovina",
+    "Serbia": "Serbia",
+    "Montenegro": "Montenegro",
+    "North Macedonia": "Macedonia del Norte",
+    "Albania": "Albania",
+    "Kosovo": "Kosovo",
+    "Romania": "Rumanía",
+    "Bulgaria": "Bulgaria",
+    "Hungary": "Hungría",
+    "Turkey": "Turquía",
+    "Iceland": "Islandia",
+    "Norway": "Noruega",
+    "Sweden": "Suecia",
+    "Finland": "Finlandia",
+    "Denmark": "Dinamarca",
+    "Estonia": "Estonia",
+    "Latvia": "Letonia",
+    "Lithuania": "Lituania",
+    "Luxembourg": "Luxemburgo",
+    "Georgia": "Georgia",
+    "Armenia": "Armenia",
+    "Azerbaijan": "Azerbaiyán",
+    "Belarus": "Bielorrusia",
+    "Moldova": "Moldavia",
+
+            // AFC
+            "Japan": "Japón",
+            "South Korea": "Corea del Sur",
+            "North Korea": "Corea del Norte",
+            "China": "China",
+            "Chinese Taipei": "Taipéi Chino",
+            "Hong Kong": "Hong Kong",
+            "Mongolia": "Mongolia",
+            "Australia": "Australia",
+            "New Zealand": "Nueva Zelanda",
+            "Saudi Arabia": "Arabia Saudita",
+            "Qatar": "Catar",
+            "United Arab Emirates": "Emiratos Árabes Unidos",
+            "Bahrain": "Baréin",
+            "Kuwait": "Kuwait",
+            "Oman": "Omán",
+            "Yemen": "Yemen",
+            "Jordan": "Jordania",
+            "Iraq": "Irak",
+            "Iran": "Irán",
+            "Syria": "Siria",
+            "Lebanon": "Líbano",
+            "Palestine": "Palestina",
+            "India": "India",
+            "Pakistan": "Pakistán",
+            "Bangladesh": "Bangladés",
+            "Thailand": "Tailandia",
+            "Vietnam": "Vietnam",
+            "Indonesia": "Indonesia",
+            "Malaysia": "Malasia",
+            "Singapore": "Singapur",
+            "Philippines": "Filipinas",        
+            "Uzbekistan": "Uzbekistán",
+            "Kazakhstan": "Kazajistán",
+            "Kyrgyzstan": "Kirguistán",
+            "Tajikistan": "Tayikistán",
+            "Turkmenistan": "Turkmenistán",
+            "Afghanistan": "Afganistán",
+
+            // CAF
+            "Morocco": "Marruecos",
+            "Algeria": "Argelia",
+            "Tunisia": "Túnez",
+            "Egypt": "Egipto",
+            "Libya": "Libia",
+            "Sudan": "Sudán",
+            "Nigeria": "Nigeria",
+            "Ghana": "Ghana",
+            "Cameroon": "Camerún",
+            "Senegal": "Senegal",
+            "Ivory Coast": "Costa de Marfil",
+            "Mali": "Malí",
+            "Burkina Faso": "Burkina Faso",
+            "Guinea": "Guinea",
+            "Benin": "Benín",
+            "Togo": "Togo",
+            "Uganda": "Uganda",
+            "Kenya": "Kenia",
+            "Tanzania": "Tanzania",
+            "South Africa": "Sudáfrica",
+            "Zimbabwe": "Zimbabue",
+            "Zambia": "Zambia",
+            "Mozambique": "Mozambique",
+            "Angola": "Angola",
+            "Cape Verde": "Cabo Verde",
+            "Mauritania": "Mauritania",
+
+    // OFC
+            "Fiji": "Fiyi",
+            "Samoa": "Samoa",
+            "Tahiti": "Tahití",
+            "Vanuatu": "Vanuatu",
+            "Solomon Islands": "Islas Salomón",
+            "Papua New Guinea": "Papúa Nueva Guinea",
+            "New Caledonia": "Nueva Caledonia",
+
+                    
+            "South Korea": "Corea del Sur",
+            "North Korea": "Corea del Norte",
+            "Saudi Arabia": "Arabia Saudita",
+            "Japan": "Japón",
+            "Iceland": "Islandia",
+            "Norway": "Noruega",
+            "Sweden": "Suecia",
+            "Germany": "Alemania",
+            "Finland": "Finlandia",
+            "Canada": "Canadá",
+            "Uzbekistan": "Uzbekistán",
+            "United States": "Estados Unidos",
+            "USA": "Estados Unidos",
+            "Mexico": "México",
+            "Brazil": "Brasil",
+            "Panama": "Panamá",
+            "Cape Verde": "Cabo Verde",
+            "Czech Republic": "República Checa",
+            "Switzerland": "Suiza",
+            "Ivory Coast": "Costa de Marfil",
+            "North Macedonia": "Macedonia del Norte",
+            "Bosnia and Herzegovina": "Bosnia y Herzegovina",
+            "Trinidad & Tobago": "Trinidad y Tobago",
+            "Dominican Republic": "República Dominicana",
+            "Netherlands": "Países Bajos",
+            "England": "Inglaterra",
+            "Wales": "Gales",
+            "Scotland": "Escocia",
+            "Northern Ireland": "Irlanda del Norte",
+            "Ireland": "Irlanda",
+            "Turkey": "Turquía",
+            "Morocco": "Marruecos",
+            "Egypt": "Egipto",
+            "Poland": "Polonia",
+            "Ukraine": "Ucrania",
+            "Jordan": "Jordania",
+            "Australia": "Australia",
+            "Slovakia": "Eslovaquia",
+            "Bulgaria": "Bulgaria",
+            "Montenegro": "Montenegro",
+            "Serbia": "Serbia",
+            "Kosovo": "Kosovo",
+            "Senegal": "Senegal",
+            "Nigeria": "Nigeria",
+            "Jamaica": "Jamaica",
+            "Colombia": "Colombia",
+            "Costa Rica": "Costa Rica",
+            "Ecuador": "Ecuador",
+            "Brazil": "Brasil",
+            "Saudi Arabia": "Arabia Saudita",
+            "South Korea": "Corea del Sur",
+            "Trinidad & Tobago": "Trinidad y Tobago",
+            "Switzerland": "Suiza",
+            "Cape Verde": "Cabo Verde",
+            "North Macedonia": "Macedonia del Norte",
+            "Hungary": "Hungría",
+            "Bangladesh": "Bangladés",
+            "Moldova": "Moldavia",
+            "Georgia": "Georgia",
+            "Angola": "Angola",
+            "Botswana": "Botsuana",
+            "Belarus": "Bielorrusia",
+            "Syria": "Siria",
+            "Indonesia": "Indonesia",
+            "Oman": "Omán",
+            "Bahrain": "Baréin",
+            "San Marino": "San Marino"
+        };
+
+        return traducciones[nombre] || nombre;
+    }
+
+
+
+function partidoCoincideBusqueda(partido, texto) {
+    if (!texto) return true;
+
+    const q = normalizarTexto(texto);
+
+    const base = normalizarTexto(`
+        ${partido.equipo1}
+        ${partido.equipo2}
+        ${partido.liga}
+        ${partido.pais}
+    `);
+
+    return base.includes(q);
+}
+
+async function buscarPartidosApiParaModificar() {
+    const fecha = buscarApiFechaInput.value;
+
+    let filtroTexto = '';
+let filtroTorneo = {};
+
+if (buscarApiTorneoSelect.value === 'custom') {
+    filtroTexto = buscarApiTextoInput.value.trim();
+} else {
+    filtroTorneo = parseFiltroTorneo(buscarApiTorneoSelect.value);
+}
+
+
+    if (!jornadaActualParaModificar) {
+        alert('Seleccione una jornada para modificar.');
+        return;
+    }
+
+    if (!fecha) {
+        alert('Seleccione una fecha.');
+        return;
+    }
+
+    partidosApiModificarContainer.innerHTML = '<div class="resultados-mensaje">Buscando partidos...</div>';
+
+    try {
+        const response = await fetch(`/api/football/fixtures?date=${encodeURIComponent(fecha)}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+            partidosApiModificarContainer.innerHTML = `<div class="resultados-mensaje">${data.error || 'Error buscando partidos.'}</div>`;
+            return;
+        }
+
+        partidosApiDisponibles = Array.isArray(data)
+    ? data
+        .filter(p => partidoCoincideConFiltro(p, filtroTorneo))
+        .filter(p => partidoCoincideBusqueda(p, filtroTexto))
+    : [];
+
+
+        renderizarPartidosApiModificar();
+
+    } catch (error) {
+        console.error('Error buscando partidos API:', error);
+        partidosApiModificarContainer.innerHTML = '<div class="resultados-mensaje">Error buscando partidos.</div>';
+    }
+}
+
+function renderizarPartidosApiModificar() {
+    if (!partidosApiDisponibles.length) {
+        partidosApiModificarContainer.innerHTML = '<div class="resultados-mensaje">No se encontraron partidos.</div>';
+        return;
+    }
+
+    partidosApiModificarContainer.innerHTML = partidosApiDisponibles.map((partido, index) => {
+        const fechaLocal = partido.fecha
+            ? new Date(partido.fecha).toLocaleString('es-CR', {
+                timeZone: 'America/Costa_Rica',
+                dateStyle: 'short',
+                timeStyle: 'short'
+            })
+            : 'Sin fecha';
+
+        return `
+            <div class="match-card">
+                <div class="match-teams">
+                    <div class="team-side">
+                        ${partido.logoEquipo1 ? `<img src="${partido.logoEquipo1}" class="team-logo" alt="${traducirEquipo(partido.equipo1)}">` : ''}
+                        <strong>${traducirEquipo(partido.equipo1)}</strong>
+                    </div>
+
+                    <span class="vs">vs</span>
+
+                    <div class="team-side">
+                        ${partido.logoEquipo2 ? `<img src="${partido.logoEquipo2}" class="team-logo" alt="${traducirEquipo(partido.equipo2)}">` : ''}
+                        <strong>${traducirEquipo(partido.equipo2)}</strong>
+                    </div>
+                </div>
+
+                <div class="match-meta">
+                    <span>${partido.liga || 'Liga'}</span>
+                    <span>${partido.pais || ''}</span>
+                    <span>${fechaLocal}</span>
+                </div>
+
+                <label class="checkbox-card">
+                    <input type="checkbox" class="apiModificarComodin" data-index="${index}">
+                    <span>Comodín</span>
+                </label>
+
+                <button type="button" class="secondary-button agregarApiAJornadaBtn" data-index="${index}">
+                    Agregar a esta jornada
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    document.querySelectorAll('.agregarApiAJornadaBtn').forEach(btn => {
+        btn.addEventListener('click', agregarPartidoApiAJornadaExistente);
+    });
+}
+
 
     function extraerPartidosDeDetalle(data) {
         if (Array.isArray(data)) return data;
@@ -187,6 +559,97 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
     }
 
+    function parseFiltroTorneo(valor) {
+    const filtro = {};
+
+    if (!valor || valor === 'custom') return filtro;
+
+    valor.split(';').forEach(parte => {
+        const [key, value] = parte.split('=');
+        if (key && value) {
+            filtro[key.trim()] = value.trim();
+        }
+    });
+
+    return filtro;
+}
+
+function esLigaNoPermitida(liga) {
+    const texto = normalizarTexto(liga);
+
+    const palabrasBloqueadas = [
+        'u20',
+        'u21',
+        'u23',
+        'sub 20',
+        'sub 21',
+        'sub 23',
+        'reserves',
+        'reserve',
+        'femenil',
+        'women',
+        'womens',
+        'femenina',
+        'feminine',
+        'juvenil',
+        'youth'
+    ];
+
+    return palabrasBloqueadas.some(palabra =>
+        texto.includes(normalizarTexto(palabra))
+    );
+}
+
+function partidoCoincideConFiltro(partido, filtro) {
+    const liga = normalizarTexto(partido.liga);
+    const pais = normalizarTexto(partido.pais);
+
+    if (esLigaNoPermitida(partido.liga)) {
+        return false;
+    }
+
+    if (filtro.country && pais !== normalizarTexto(filtro.country)) {
+        return false;
+    }
+
+    if (filtro.league_exact) {
+        const ligaEsperada = normalizarTexto(filtro.league_exact);
+
+        if (
+            liga !== ligaEsperada &&
+            !liga.includes(ligaEsperada)
+        ) {
+            return false;
+        }
+    }
+
+    if (filtro.league_contains && !liga.includes(normalizarTexto(filtro.league_contains))) {
+        return false;
+    }
+
+    if (filtro.league_any) {
+        const opciones = filtro.league_any
+            .split('|')
+            .map(opcion => normalizarTexto(opcion));
+
+        const coincideAlguna = opciones.some(opcion =>
+            liga.includes(opcion)
+        );
+
+        if (!coincideAlguna) {
+            return false;
+        }
+    }
+
+    if (filtro.text) {
+        const texto = normalizarTexto(filtro.text);
+        return `${liga} ${pais}`.includes(texto);
+    }
+
+    return true;
+}
+
+
     function updateJornadaSelect() {
         jornadaSelect.innerHTML = '<option value="">Selecciona una jornada</option>';
         modificarJornadaSelect.innerHTML = '<option value="">Selecciona una jornada</option>';
@@ -238,6 +701,76 @@ document.addEventListener('DOMContentLoaded', async () => {
             ul.appendChild(li);
         });
     }
+
+    async function agregarPartidoApiAJornadaExistente(event) {
+    const index = Number(event.target.dataset.index);
+    const partidoApi = partidosApiDisponibles[index];
+
+    if (!partidoApi || !jornadaActualParaModificar) return;
+
+    const comodinCheckbox = document.querySelector(`.apiModificarComodin[data-index="${index}"]`);
+    const comodin = comodinCheckbox ? comodinCheckbox.checked : false;
+
+    const confirmar = confirm(
+  `¿Agregar ${traducirEquipo(partidoApi.equipo1)} vs ${traducirEquipo(partidoApi.equipo2)} a ${jornadaActualParaModificar}?\n\n` +
+  `Este partido se agregará AL FINAL de la jornada.\n\n` +
+  `No se deben insertar partidos en medio ni eliminar partidos anteriores si ya hay pronósticos guardados.`
+);
+
+
+    if (!confirmar) return;
+
+    try {
+        const response = await fetch(`/api/jornadas/${encodeURIComponent(jornadaActualParaModificar)}`);
+        const data = await response.json();
+        const partidos = extraerPartidosDeDetalle(data);
+
+        partidos.push({
+            equipo1: traducirEquipo(partidoApi.equipo1),
+            equipo2: traducirEquipo(partidoApi.equipo2),
+
+            logoEquipo1: partidoApi.logoEquipo1 || '',
+            logoEquipo2: partidoApi.logoEquipo2 || '',
+
+            comodin,
+
+            apiFixtureId: partidoApi.apiFixtureId,
+            apiLeagueId: partidoApi.apiLeagueId,
+
+            apiDate: partidoApi.fecha,
+            fecha: partidoApi.fecha,
+            estado: partidoApi.estado,
+            liga: partidoApi.liga,
+            pais: partidoApi.pais
+        });
+
+        const guardarResponse = await fetch('/api/jornadas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nombre: jornadaActualParaModificar,
+                partidos,
+                fechaCierre: data.fechaCierre || jornadas.get(jornadaActualParaModificar)?.fechaCierre || null
+            })
+        });
+
+        if (!guardarResponse.ok) {
+            alert('Error agregando partido a la jornada.');
+            return;
+        }
+
+        alert('Partido agregado correctamente.');
+
+        loadJornadas();
+        updateJornadaPartidos();
+        updateModificarJornadaPartidos();
+
+    } catch (error) {
+        console.error('Error agregando partido API:', error);
+        alert('Error agregando partido API.');
+    }
+}
+
 
     function updateJornadaPartidos() {
         const selectedJornada = jornadaSelect.value;
@@ -704,6 +1237,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert('Error eliminando jornada');
         }
     });
+
+    buscarApiTorneoSelect.addEventListener('change', () => {
+    buscarApiCustomBox.style.display =
+        buscarApiTorneoSelect.value === 'custom' ? 'block' : 'none';
+});
+
+buscarPartidosApiButton.addEventListener('click', buscarPartidosApiParaModificar);
 
     await cargarEquipos();
     loadJornadas();

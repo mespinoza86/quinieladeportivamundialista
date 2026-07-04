@@ -6,11 +6,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const puntosContainer = document.getElementById('puntosContainer');
     const totalPuntosContainer = document.getElementById('totalPuntosContainer');
 
+    let verTodosAutorizado = false;
+    let passwordGuardada = '';
+
     function isValidScore(v) {
         if (v === null || v === undefined) return false;
         if (typeof v === 'string' && v.trim() === '') return false;
-        const n = Number(v);
-        return Number.isFinite(n);
+        return Number.isFinite(Number(v));
     }
 
     function logoHTML(url, nombre) {
@@ -18,25 +20,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<img src="${url}" class="team-logo" alt="${nombre || 'Equipo'}">`;
     }
 
-    function formatearFecha(fecha) {
-        if (!fecha) return '';
-
-        const d = new Date(fecha);
-
-        if (Number.isNaN(d.getTime())) return fecha;
-
-        return d.toLocaleString('es-CR', {
-            timeZone: 'America/Costa_Rica',
-            dateStyle: 'short',
-            timeStyle: 'short'
-        });
-    }
+    
 
     function formatearFechaPartido(apiDate) {
         if (!apiDate) return 'Fecha no disponible';
 
         const fecha = new Date(String(apiDate).replace(' ', 'T'));
-
         if (Number.isNaN(fecha.getTime())) return apiDate;
 
         return fecha.toLocaleString('es-CR', {
@@ -47,14 +36,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function partidoYaCerro(partidoBase, partidoOficial) {
-        if (partidoOficial && ['LIVE', 'MT', 'TC'].includes(partidoOficial.estado)) {
-            return true;
-        }
-
+        if (partidoOficial && ['LIVE', 'MT', 'TC'].includes(partidoOficial.estado)) return true;
         if (!partidoBase?.apiDate) return false;
 
         const fecha = new Date(String(partidoBase.apiDate).replace(' ', 'T'));
-
         if (Number.isNaN(fecha.getTime())) return false;
 
         return fecha <= new Date();
@@ -68,10 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (partido.estado === 'MT') {
-            return `<span class="status-pill status-live">
-                <span class="live-dot"></span>
-                MT
-            </span>`;
+            return `<span class="status-pill status-live"><span class="live-dot"></span>MT</span>`;
         }
 
         if (partido.estado === 'LIVE' && partido.minuto) {
@@ -80,8 +62,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 ${partido.minuto}${String(partido.minuto).includes('+') ? '' : "'"}
             </span>`;
         }
-
-        return `<span class="status-pill status-scheduled">${formatearFecha(partido.fecha)}</span>`;
+        
+        return `<span class="status-pill status-scheduled">${formatearFechaPartido(partido.fecha)}</span>`;
     }
 
     function buscarOficialPorPartido(partidosOficiales, partidoBase) {
@@ -140,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 modal.style.display = "none";
                 okBtn.removeEventListener("click", aceptar);
                 cancelBtn.removeEventListener("click", cancelar);
+                input.removeEventListener("keydown", enterHandler);
                 resolve(valor);
             }
 
@@ -151,8 +134,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 cerrar(null);
             }
 
+            function enterHandler(e) {
+                if (e.key === 'Enter') aceptar();
+            }
+
             okBtn.addEventListener("click", aceptar);
             cancelBtn.addEventListener("click", cancelar);
+            input.addEventListener("keydown", enterHandler);
         });
     }
 
@@ -187,8 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (jornadas.length > 0) {
-                const ultimaJornada = jornadas[jornadas.length - 1].nombre;
-                jornadaSelect.value = ultimaJornada;
+                jornadaSelect.value = jornadas[jornadas.length - 1].nombre;
             }
         }
     }
@@ -199,7 +186,63 @@ document.addEventListener('DOMContentLoaded', () => {
         return await res.json();
     }
 
-    async function buscarResultados() {
+    async function verificarPasswordJugador(jugador, password) {
+        const resp = await fetch(`/api/jugadores/${encodeURIComponent(jugador)}/verificar-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+
+        const data = await resp.json();
+
+        return {
+            ok: resp.ok && data.success,
+            error: data.error || 'Contraseña incorrecta'
+        };
+    }
+
+    function crearBotonVerTodos() {
+        const existente = document.getElementById('verTodosPartidosBtn');
+        if (existente) existente.remove();
+
+        const btn = document.createElement('button');
+        btn.id = 'verTodosPartidosBtn';
+        btn.type = 'button';
+        btn.className = 'secondary-button';
+        btn.textContent = 'Ver todos los partidos';
+
+        btn.addEventListener('click', async () => {
+            const jugador = jugadorSelect.value;
+
+            if (!jugador) {
+                alert('Seleccione un jugador.');
+                return;
+            }
+
+            const password = await pedirPassword();
+
+            if (!password) {
+                totalPuntosContainer.innerHTML = `<p>Debe ingresar contraseña para ver todos los partidos.</p>`;
+                return;
+            }
+
+            const validacion = await verificarPasswordJugador(jugador, password);
+
+            if (!validacion.ok) {
+                totalPuntosContainer.innerHTML = `<p style="color:#ffb3b3;">Contraseña incorrecta.</p>`;
+                return;
+            }
+
+            verTodosAutorizado = true;
+            passwordGuardada = password;
+
+            await buscarResultados(true);
+        });
+
+        totalPuntosContainer.appendChild(btn);
+    }
+
+    async function buscarResultados(mostrarTodos = verTodosAutorizado) {
         const jugador = jugadorSelect.value;
         const jornada = jornadaSelect.value;
 
@@ -212,34 +255,18 @@ document.addEventListener('DOMContentLoaded', () => {
         puntosContainer.innerHTML = '';
         totalPuntosContainer.innerHTML = '';
 
-        function fetchResultados(password = "") {
-            return fetch(`/api/resultados-seguros/${encodeURIComponent(jugador)}/${encodeURIComponent(jornada)}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ password })
-            }).then(r => r.json());
-        }
-
         try {
-            let data = await fetchResultados();
+            const resPronosticos = await fetch(
+                                    `/api/resultados-con-equipos/${encodeURIComponent(jugador)}/${encodeURIComponent(jornada)}`
+            );
 
-            if (!data.success && data.error === "Contraseña requerida") {
-                const password = await pedirPassword();
-
-                if (!password) {
-                    resultadosContainer.textContent = "No se ingresó contraseña.";
-                    return;
-                }
-
-                data = await fetchResultados(password);
-            }
-
-            if (!data || !data.success) {
-                resultadosContainer.textContent = data?.error || "Error al obtener resultados.";
+            if (resPronosticos.status === 404) {
+                resultadosContainer.textContent = 'El jugador no ha pronosticado esta jornada.';
                 return;
             }
 
-            const partidos = data.partidos;
+            const partidos = await resPronosticos.json();
+
 
             if (!Array.isArray(partidos) || partidos.length === 0) {
                 resultadosContainer.textContent = 'El jugador no ha pronosticado esta jornada.';
@@ -262,6 +289,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let totalPuntos = 0;
             let partidosMostrados = 0;
+            let partidosOcultos = 0;
 
             partidos.forEach((partidoPronosticado, index) => {
                 const partidoBase = partidosJornada[index] || partidoPronosticado;
@@ -271,14 +299,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     partidoBase
                 );
 
-                if (!partidoYaCerro(partidoBase, resultadoOficialCorrespondiente)) {
+                const cerrado = partidoYaCerro(partidoBase, resultadoOficialCorrespondiente);
+
+                if (!cerrado && !mostrarTodos) {
+                    partidosOcultos++;
                     return;
                 }
 
                 partidosMostrados++;
 
-                const puntos = calcularPuntos(partidoPronosticado, resultadoOficialCorrespondiente);
-                totalPuntos += puntos;
+                const puntos = cerrado
+                    ? calcularPuntos(partidoPronosticado, resultadoOficialCorrespondiente)
+                    : 0;
+
+                if (cerrado) {
+                    totalPuntos += puntos;
+                }
 
                 const oficialTexto = resultadoOficialCorrespondiente &&
                     isValidScore(resultadoOficialCorrespondiente.marcador1) &&
@@ -288,6 +324,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const partidoDiv = document.createElement('div');
                 partidoDiv.classList.add('match-card', 'resultado');
+
+                if (!cerrado) {
+                    partidoDiv.classList.add('partido-cerrado');
+                }
 
                 if (resultadoOficialCorrespondiente?.comodin || partidoBase?.comodin) {
                     partidoDiv.classList.add('match-card-comodin');
@@ -304,18 +344,22 @@ document.addEventListener('DOMContentLoaded', () => {
                                 </div>
 
                                 <div class="match-meta">
-                                    <span>📅 ${formatearFechaPartido(partidoBase.apiDate)}</span>
+                                    <span>📅 ${formatearFechaPartido(partidoBase.apiDate)}</span>                                    
+                                    ${!cerrado ? '<span class="status-pill status-scheduled">Aún no cerrado</span>' : ''}
                                 </div>
                             </div>
 
                             <div class="match-score">
                                 <span>Pronóstico</span>
                                 <strong>${partidoPronosticado.marcador1 ?? '-'} - ${partidoPronosticado.marcador2 ?? '-'}</strong>
-                                <span>Oficial: ${oficialTexto}</span>
+                                <span>Oficial: ${cerrado ? oficialTexto : 'Pendiente'}</span>
                             </div>
 
                             <div class="match-status">
-                                ${resultadoOficialCorrespondiente ? estadoPartidoHTML(resultadoOficialCorrespondiente) : '<span class="status-pill status-finished">Cerrado</span>'}
+                                ${cerrado
+                                    ? (resultadoOficialCorrespondiente ? estadoPartidoHTML(resultadoOficialCorrespondiente) : '<span class="status-pill status-finished">Cerrado</span>')
+                                    : '<span class="status-pill status-scheduled">Privado</span>'
+                                }
                             </div>
                         </div>
                     </div>
@@ -337,8 +381,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
 
                     <div class="match-meta">
-                        <span>Oficial: ${oficialTexto}</span>
-                        <span>Puntos: ${puntos}</span>
+                        <span>Oficial: ${cerrado ? oficialTexto : 'Pendiente'}</span>
+                        <span>Puntos: ${cerrado ? puntos : '-'}</span>
                     </div>
                 `;
 
@@ -347,11 +391,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (partidosMostrados === 0) {
                 resultadosContainer.innerHTML = 'Todavía no hay partidos cerrados para mostrar en esta jornada.';
-                totalPuntosContainer.innerHTML = '';
-                return;
             }
 
-            totalPuntosContainer.innerHTML = `<h3>Total de Puntos Obtenidos en partidos visibles: ${totalPuntos}</h3>`;
+            totalPuntosContainer.innerHTML = `
+                <h3>Total de Puntos Obtenidos en partidos visibles: ${totalPuntos}</h3>
+                ${partidosOcultos > 0 && !mostrarTodos
+                    ? `<p>Hay ${partidosOcultos} partido(s) que aún no han cerrado.</p>`
+                    : ''
+                }
+            `;
+
+            if (partidosOcultos > 0 && !mostrarTodos) {
+                crearBotonVerTodos();
+            }
 
         } catch (error) {
             console.error('Error al buscar resultados:', error);
@@ -359,23 +411,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    searchResultadosButtonpuntos.addEventListener('click', buscarResultados);
+    searchResultadosButtonpuntos.addEventListener('click', () => {
+        verTodosAutorizado = false;
+        passwordGuardada = '';
+        buscarResultados(false);
+    });
 
     jugadorSelect.addEventListener('change', () => {
+        verTodosAutorizado = false;
+        passwordGuardada = '';
+
         if (jugadorSelect.value && jornadaSelect.value) {
-            buscarResultados();
+            buscarResultados(false);
         }
     });
 
     jornadaSelect.addEventListener('change', () => {
+        verTodosAutorizado = false;
+        passwordGuardada = '';
+
         if (jugadorSelect.value && jornadaSelect.value) {
-            buscarResultados();
+            buscarResultados(false);
         }
     });
 
     setInterval(() => {
         if (jugadorSelect.value && jornadaSelect.value) {
-            buscarResultados();
+            buscarResultados(verTodosAutorizado);
         }
     }, 30000);
 

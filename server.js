@@ -70,6 +70,8 @@ const paginasAdmin = [
   '/copiarresultadojugador.html',
   '/admin_trivias.html',
   '/enviarresultadostrivias.html',
+  '/enviarresultadospartido.html',
+  '/enviarresultadostriviaspartido.html',
   '/campeon-oficial.html'
 ];
 

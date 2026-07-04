@@ -4,6 +4,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchResultadosButton = document.getElementById('searchResultadosButton');
     const resultadosContainer = document.getElementById('resultadosContainer');
 
+    let verTodosAutorizado = false;
+    let passwordGuardada = '';
+
     function logoHTML(url, nombre) {
         if (!url) return '';
         return `<img src="${url}" class="team-logo" alt="${nombre || 'Equipo'}">`;
@@ -13,7 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!apiDate) return 'Fecha no disponible';
 
         const fecha = new Date(String(apiDate).replace(' ', 'T'));
-
         if (Number.isNaN(fecha.getTime())) return apiDate;
 
         return fecha.toLocaleString('es-CR', {
@@ -24,14 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function partidoYaCerro(partidoBase, partidoOficial) {
-        if (partidoOficial && ['LIVE', 'MT', 'TC'].includes(partidoOficial.estado)) {
-            return true;
-        }
-
+        if (partidoOficial && ['LIVE', 'MT', 'TC'].includes(partidoOficial.estado)) return true;
         if (!partidoBase?.apiDate) return false;
 
         const fecha = new Date(String(partidoBase.apiDate).replace(' ', 'T'));
-
         if (Number.isNaN(fecha.getTime())) return false;
 
         return fecha <= new Date();
@@ -66,6 +64,90 @@ document.addEventListener('DOMContentLoaded', () => {
             (partido.equipo1 === partidoBase.equipo1 && partido.equipo2 === partidoBase.equipo2) ||
             (partido.equipo1 === partidoBase.equipo2 && partido.equipo2 === partidoBase.equipo1)
         );
+    }
+
+    function pedirPassword() {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('passwordModal');
+            const input = document.getElementById('passwordInput');
+            const aceptar = document.getElementById('passwordAceptar');
+            const cancelar = document.getElementById('passwordCancelar');
+
+            modal.style.display = 'flex';
+            input.value = '';
+            input.focus();
+
+            aceptar.onclick = () => {
+                const val = input.value.trim();
+                modal.style.display = 'none';
+                resolve(val || null);
+            };
+
+            cancelar.onclick = () => {
+                modal.style.display = 'none';
+                resolve(null);
+            };
+        });
+    }
+
+    async function verificarPasswordJugador(jugador, password) {
+        const resp = await fetch(`/api/jugadores/${encodeURIComponent(jugador)}/verificar-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+
+        const data = await resp.json();
+
+        return {
+            ok: resp.ok && data.success,
+            error: data.error || 'Contraseña incorrecta'
+        };
+    }
+
+    function crearBotonVerTodos() {
+        const existente = document.getElementById('verTodosPartidosBtn');
+        if (existente) existente.remove();
+
+        const btn = document.createElement('button');
+        btn.id = 'verTodosPartidosBtn';
+        btn.type = 'button';
+        btn.className = 'secondary-button';
+        btn.textContent = 'Ver todos los partidos';
+
+        btn.addEventListener('click', async () => {
+            const jugador = jugadorSelect.value;
+
+            if (!jugador) {
+                alert('Seleccione un jugador.');
+                return;
+            }
+
+            const password = await pedirPassword();
+
+            if (!password) {
+                resultadosContainer.insertAdjacentHTML('beforeend', `
+                    <div class="resultados-mensaje">Debe ingresar contraseña para ver todos los partidos.</div>
+                `);
+                return;
+            }
+
+            const validacion = await verificarPasswordJugador(jugador, password);
+
+            if (!validacion.ok) {
+                resultadosContainer.insertAdjacentHTML('beforeend', `
+                    <div class="resultados-mensaje" style="color:#ffb3b3;">Contraseña incorrecta.</div>
+                `);
+                return;
+            }
+
+            verTodosAutorizado = true;
+            passwordGuardada = password;
+
+            await buscarResultados(true);
+        });
+
+        resultadosContainer.appendChild(btn);
     }
 
     function loadJugadores() {
@@ -106,41 +188,13 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(console.error);
     }
 
-    function pedirPassword() {
-        return new Promise((resolve, reject) => {
-            const modal = document.getElementById('passwordModal');
-            const input = document.getElementById('passwordInput');
-            const aceptar = document.getElementById('passwordAceptar');
-            const cancelar = document.getElementById('passwordCancelar');
-
-            modal.style.display = 'flex';
-            input.value = '';
-            input.focus();
-
-            aceptar.onclick = () => {
-                const val = input.value.trim();
-                modal.style.display = 'none';
-
-                if (!val) reject('Contraseña requerida');
-                else resolve(val);
-            };
-
-            cancelar.onclick = () => {
-                modal.style.display = 'none';
-                reject('Cancelado');
-            };
-        });
-    }
-
     async function obtenerJornada(jornadaNombre) {
         const res = await fetch(`/api/jornadas/${encodeURIComponent(jornadaNombre)}`);
-
         if (!res.ok) return null;
-
         return await res.json();
     }
 
-    async function buscarResultados() {
+    async function buscarResultados(mostrarTodos = verTodosAutorizado) {
         const jugador = jugadorSelect.value;
         const jornada = jornadaSelect.value;
 
@@ -151,44 +205,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         resultadosContainer.textContent = 'Cargando resultados...';
 
-        let body = {};
-
         try {
-            let data = await fetch(
-                `/api/resultados-seguros/${encodeURIComponent(jugador)}/${encodeURIComponent(jornada)}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                }
-            ).then(res => res.json());
+         const resPronosticos = await fetch(
+    `/api/resultados-con-equipos/${encodeURIComponent(jugador)}/${encodeURIComponent(jornada)}`
+);
 
-            if (data && data.success === false && data.error === 'Contraseña requerida') {
-                const password = await pedirPassword();
+resultadosContainer.innerHTML = '';
 
-                body.password = password;
+if (resPronosticos.status === 404) {
+    resultadosContainer.textContent = 'El jugador no ha pronosticado resultados para esta jornada.';
+    return;
+}
 
-                data = await fetch(
-                    `/api/resultados-seguros/${encodeURIComponent(jugador)}/${encodeURIComponent(jornada)}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(body)
-                    }
-                ).then(res => res.json());
-            }
+if (!resPronosticos.ok) {
+    resultadosContainer.textContent = 'Error al obtener resultados.';
+    return;
+}
 
-            resultadosContainer.innerHTML = '';
+const partidos = await resPronosticos.json();
 
-            if (data && data.success === false && data.error === 'Contraseña incorrecta') {
-                resultadosContainer.textContent = 'La contraseña es incorrecta.';
-                return;
-            }
+if (!Array.isArray(partidos) || partidos.length === 0) {
+    resultadosContainer.textContent = 'El jugador no ha pronosticado resultados para esta jornada.';
+    return;
+}
 
-            if (!data || !data.partidos || data.partidos.length === 0) {
-                resultadosContainer.textContent = 'El jugador no ha pronosticado resultados para esta jornada.';
-                return;
-            }
 
             const jornadaData = await obtenerJornada(jornada);
             const partidosJornada = jornadaData?.partidos || [];
@@ -203,12 +243,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const partidosOficiales = oficialJornada ? oficialJornada.partidos : [];
 
             let partidosMostrados = 0;
+            let partidosOcultos = 0;
 
-            data.partidos.forEach((p, index) => {
+            
+                partidos.forEach((p, index) => {
                 const partidoBase = partidosJornada[index] || p;
                 const partidoOficial = buscarOficialPorPartido(partidosOficiales, partidoBase);
+                const cerrado = partidoYaCerro(partidoBase, partidoOficial);
 
-                if (!partidoYaCerro(partidoBase, partidoOficial)) {
+                if (!cerrado && !mostrarTodos) {
+                    partidosOcultos++;
                     return;
                 }
 
@@ -216,6 +260,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const div = document.createElement('div');
                 div.classList.add('match-card', 'resultado');
+
+                if (!cerrado) {
+                    div.classList.add('partido-cerrado');
+                }
 
                 if (partidoBase?.comodin || partidoOficial?.comodin) {
                     div.classList.add('match-card-comodin');
@@ -233,6 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                                 <div class="match-meta">
                                     <span>📅 ${formatearFechaPartido(partidoBase.apiDate)}</span>
+                                    ${!cerrado ? '<span class="status-pill status-scheduled">Aún no cerrado</span>' : ''}
                                 </div>
                             </div>
 
@@ -242,7 +291,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
 
                             <div class="match-status">
-                                ${estadoPartidoHTML(partidoOficial)}
+                                ${cerrado
+                                    ? estadoPartidoHTML(partidoOficial)
+                                    : '<span class="status-pill status-scheduled">Privado</span>'
+                                }
                             </div>
                         </div>
                     </div>
@@ -268,7 +320,17 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (partidosMostrados === 0) {
-                resultadosContainer.textContent = 'Todavía no hay partidos cerrados para mostrar en esta jornada.';
+                resultadosContainer.innerHTML = 'Todavía no hay partidos cerrados para mostrar en esta jornada.';
+            }
+
+            if (partidosOcultos > 0 && !mostrarTodos) {
+                resultadosContainer.insertAdjacentHTML('beforeend', `
+                    <div class="resultados-mensaje">
+                        Hay ${partidosOcultos} partido(s) que aún no han cerrado.
+                    </div>
+                `);
+
+                crearBotonVerTodos();
             }
 
         } catch (err) {
@@ -277,23 +339,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    searchResultadosButton.addEventListener('click', buscarResultados);
+    searchResultadosButton.addEventListener('click', () => {
+        verTodosAutorizado = false;
+        passwordGuardada = '';
+        buscarResultados(false);
+    });
 
     jugadorSelect.addEventListener('change', () => {
+        verTodosAutorizado = false;
+        passwordGuardada = '';
+
         if (jugadorSelect.value && jornadaSelect.value) {
-            buscarResultados();
+            buscarResultados(false);
         }
     });
 
     jornadaSelect.addEventListener('change', () => {
+        verTodosAutorizado = false;
+        passwordGuardada = '';
+
         if (jugadorSelect.value && jornadaSelect.value) {
-            buscarResultados();
+            buscarResultados(false);
         }
     });
 
     setInterval(() => {
         if (jugadorSelect.value && jornadaSelect.value) {
-            buscarResultados();
+            buscarResultados(verTodosAutorizado);
         }
     }, 30000);
 

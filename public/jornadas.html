@@ -154,6 +154,86 @@
 
         <button id="agregarPartidoButton">Agregar Partido</button>
 
+        <div class="divider"></div>
+
+<h3>Buscar partidos desde API</h3>
+
+<div class="two-column">
+  <div>
+    <label for="buscarApiFechaInput" class="field-label">Fecha</label>
+    <input type="date" id="buscarApiFechaInput" />
+  </div>
+
+  <div>
+  <label for="buscarApiTorneoSelect" class="field-label">Torneo</label>
+  <select id="buscarApiTorneoSelect">
+            <option value="">Todos los torneos</option>
+
+            <optgroup label="Clubes">
+              <option value="country=Mexico;league_exact=Liga MX">México - Liga MX</option>
+          
+              <option value="country=Costa Rica;league_exact=Primera Division">Costa Rica - Primera División</option>
+              <option value="country=Costa Rica;league_exact=Liga de Ascenso">Costa Rica - Segunda División</option>
+
+              <option value="country=Honduras;league_exact=Liga Nacional">Honduras - Liga Nacional</option>
+              <option value="country=El Salvador;league_exact=Primera División">El Salvador - Primera División</option>
+              <option value="country=Panama;league_exact=LPF">Panamá - LPF</option>
+              <option value="country=Guatemala;league_exact=Liga Nacional">Guatemala - Liga Nacional</option>
+
+              <option value="country=Argentina;league_exact=Liga Profesional Argentina">Argentina - Liga Profesional</option>
+              <option value="country=Brazil;league_exact=Serie A">Brasil - Serie A</option>
+
+              <option value="country=England;league_exact=Premier League">Premier League</option>
+              <option value="country=Spain;league_exact=La Liga">La Liga</option>
+              <option value="country=Germany;league_exact=Bundesliga">Bundesliga</option>
+              <option value="country=France;league_exact=Ligue 1">Ligue 1</option>
+
+              <option value="league_exact=UEFA Champions League">UEFA Champions League</option>
+              <option value="league_exact=UEFA Europa League">UEFA Europa League</option>
+              <option value="league_exact=CONMEBOL Libertadores">CONMEBOL Libertadores</option>
+              <option value="league_exact=CONMEBOL Sudamericana">CONMEBOL Sudamericana</option>
+              <option value="league_contains=CONCACAF">CONCACAF Champions Cup</option>
+
+              <option value="country=USA;league_exact=Major League Soccer">MLS</option>
+            </optgroup>
+
+            <optgroup label="Selecciones">
+              <option value="league_any=World Cup|Copa del Mundo|FIFA World Cup">Mundial FIFA</option>
+              <option value="league_any=World Cup Qualification|World Cup Qualifying|WC Qualification">Eliminatorias Mundialistas</option>
+          
+              <option value="league_any=CONCACAF Gold Cup|Gold Cup">Copa Oro CONCACAF</option>
+              <option value="league_any=CONCACAF Nations League">CONCACAF Nations League</option>
+          
+              <option value="league_any=Copa America|CONMEBOL Copa America">Copa América</option>
+              <option value="league_any=UEFA Nations League">UEFA Nations League</option>
+              <option value="league_any=Euro Championship|UEFA Euro">Eurocopa</option>
+
+              <option value="league_any=Friendlies|Friendly International|International Friendlies">Amistosos Internacionales</option>
+            </optgroup>
+
+            <option value="custom">Buscar por texto</option>
+
+          </select>
+
+
+  
+    
+</div>
+
+</div>
+
+<div id="buscarApiCustomBox" style="display:none;">
+  <label for="buscarApiTextoInput" class="field-label">Texto a buscar</label>
+  <input type="text" id="buscarApiTextoInput" placeholder="Ej: Argentina, World Cup, FIFA" />
+</div>
+
+
+<button id="buscarPartidosApiButton" type="button" class="secondary-button">
+  Buscar partidos API
+</button>
+
+<div id="partidosApiModificarContainer" class="matches-container"></div>
+
         <div class="list-card">
           <ul id="partidosModificarList"></ul>
         </div>
