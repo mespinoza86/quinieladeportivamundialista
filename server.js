@@ -978,10 +978,6 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
 
       const existente = buscarOficialCorrespondiente(resultadosExistentes, partido);
 
-      if (existente?.origen === 'manual' || existente?.bloqueadoFinal) {
-        resultadosActualizados.push(existente);
-        continue;
-      }
 
       let fixture = null;
 
@@ -1029,6 +1025,42 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
 
       const vieneInvertido = home === eq2 && away === eq1;
       const estadoPartido = obtenerEstadoPartido(fixture, partido);
+
+      const resultadoApi = {
+  equipo1: partido.equipo1,
+  logoEquipo1: partido.logoEquipo1 || '',
+  marcador1: vieneInvertido ? marcador90.marcador2 : marcador90.marcador1,
+  equipo2: partido.equipo2,
+  logoEquipo2: partido.logoEquipo2 || '',
+  marcador2: vieneInvertido ? marcador90.marcador1 : marcador90.marcador2,
+  comodin: partido.comodin,
+
+  estado: estadoPartido.estado,
+  minuto: estadoPartido.minuto,
+  fecha: partido.apiDate || '',
+
+  origen: 'api',
+  bloqueadoFinal: estadoPartido.estado === 'TC',
+  actualizadoEn: new Date()
+};
+
+if (estadoPartido.estado === 'LIVE' || estadoPartido.estado === 'MT') {
+  resultadosActualizados.push(resultadoApi);
+  continue;
+}
+
+if (estadoPartido.estado === 'TC' && existente?.origen === 'manual') {
+  resultadosActualizados.push(existente);
+  continue;
+}
+
+if (estadoPartido.estado === 'PROGRAMADO' && existente) {
+  resultadosActualizados.push(existente);
+  continue;
+}
+
+resultadosActualizados.push(resultadoApi);
+
 
      resultadosActualizados.push({
   equipo1: partido.equipo1,
