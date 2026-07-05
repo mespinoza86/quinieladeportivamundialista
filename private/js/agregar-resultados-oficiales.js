@@ -142,13 +142,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const resultados = Array.from(partidosContainer.querySelectorAll('.partido')).map(partido => {
             const inputs = partido.querySelectorAll('input');
 
-            return {
-                equipo1: inputs[0].dataset.equipo,
-                marcador1: inputs[0].value === '' ? null : Number(inputs[0].value),
-                equipo2: inputs[1].dataset.equipo,
-                marcador2: inputs[1].value === '' ? null : Number(inputs[1].value),
-                comodin: partido.dataset.comodin === 'true'
-            };
+        return {
+    equipo1: inputs[0].dataset.equipo,
+    marcador1: inputs[0].value === '' ? null : Number(inputs[0].value),
+    equipo2: inputs[1].dataset.equipo,
+    marcador2: inputs[1].value === '' ? null : Number(inputs[1].value),
+    comodin: partido.dataset.comodin === 'true',
+    estado: 'TC'
+};
+
         });
 
         const response = await fetch('/api/resultados-oficiales', {

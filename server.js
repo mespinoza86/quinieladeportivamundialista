@@ -234,7 +234,11 @@ const ResultadoOficialSchema = new mongoose.Schema({
 
     estado: String,
     minuto: mongoose.Schema.Types.Mixed,
-    fecha: String
+    fecha: String,
+
+    origen: { type: String, default: 'api' },
+    bloqueadoFinal: { type: Boolean, default: false },
+    actualizadoEn: Date
   }]
 });
 
@@ -786,6 +790,7 @@ async function buscarEventoPorId(matchId) {
     params: {
       action: 'get_events',
       match_id: String(matchId),
+      timezone: 'America/Costa_Rica',
       APIkey: process.env.APIFOOTBALL_COM_KEY
     }
   });
@@ -960,6 +965,8 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
     }
 
     const jornadaDoc = await Jornada.findOne({ nombre: jornada });
+    const oficialExistente = await ResultadoOficial.findOne({ jornada });
+    const resultadosExistentes = oficialExistente ? oficialExistente.resultados : [];
 
     if (!jornadaDoc) {
       return res.status(404).json({ error: 'Jornada no encontrada' });
@@ -968,6 +975,14 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
     const resultadosActualizados = [];
 
     for (const partido of jornadaDoc.partidos) {
+
+      const existente = buscarOficialCorrespondiente(resultadosExistentes, partido);
+
+      if (existente?.origen === 'manual' || existente?.bloqueadoFinal) {
+        resultadosActualizados.push(existente);
+        continue;
+      }
+
       let fixture = null;
 
       if (partido.apiFixtureId) {
@@ -979,22 +994,31 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
       }
 
       if (!fixture) {
-        resultadosActualizados.push({
-          equipo1: partido.equipo1,
-          logoEquipo1: partido.logoEquipo1 || '',
-          marcador1: null,
-          equipo2: partido.equipo2,
-          logoEquipo2: partido.logoEquipo2 || '',
-          marcador2: null,
-          comodin: partido.comodin,
+  if (existente) {
+    resultadosActualizados.push(existente);
+  } else {
+    resultadosActualizados.push({
+      equipo1: partido.equipo1,
+      logoEquipo1: partido.logoEquipo1 || '',
+      marcador1: null,
+      equipo2: partido.equipo2,
+      logoEquipo2: partido.logoEquipo2 || '',
+      marcador2: null,
+      comodin: partido.comodin,
 
-          estado: 'PROGRAMADO',
-          minuto: null,
-          fecha: partido.apiDate || ''
-        });
+      estado: 'PROGRAMADO',
+      minuto: null,
+      fecha: partido.apiDate || '',
 
-        continue;
-      }
+      origen: 'api',
+      bloqueadoFinal: false,
+      actualizadoEn: new Date()
+    });
+  }
+
+  continue;
+}
+
 
       const marcador90 = obtenerMarcador90Minutos(fixture);
 
@@ -1006,19 +1030,23 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
       const vieneInvertido = home === eq2 && away === eq1;
       const estadoPartido = obtenerEstadoPartido(fixture, partido);
 
-      resultadosActualizados.push({
-        equipo1: partido.equipo1,
-        logoEquipo1: partido.logoEquipo1 || '',
-        marcador1: vieneInvertido ? marcador90.marcador2 : marcador90.marcador1,
-        equipo2: partido.equipo2,
-        logoEquipo2: partido.logoEquipo2 || '',
-        marcador2: vieneInvertido ? marcador90.marcador1 : marcador90.marcador2,
-        comodin: partido.comodin,
+     resultadosActualizados.push({
+  equipo1: partido.equipo1,
+  logoEquipo1: partido.logoEquipo1 || '',
+  marcador1: vieneInvertido ? marcador90.marcador2 : marcador90.marcador1,
+  equipo2: partido.equipo2,
+  logoEquipo2: partido.logoEquipo2 || '',
+  marcador2: vieneInvertido ? marcador90.marcador1 : marcador90.marcador2,
+  comodin: partido.comodin,
 
-        estado: estadoPartido.estado,
-        minuto: estadoPartido.minuto,
-        fecha: partido.apiDate || ''
-      });
+  estado: estadoPartido.estado,
+  minuto: estadoPartido.minuto,
+  fecha: partido.apiDate || '',
+
+  origen: 'api',
+  bloqueadoFinal: estadoPartido.estado === 'TC',
+  actualizadoEn: new Date()
+});
     }
 
     await ResultadoOficial.findOneAndUpdate(
@@ -1327,20 +1355,23 @@ app.post('/api/resultados-oficiales', requireAdmin, async (req, res) => {
   const resultadosConLogos = resultados.map((r, index) => {
     const partidoJornada = jornadaDoc?.partidos?.[index];
 
-    return {
-      equipo1: r.equipo1,
-      logoEquipo1: r.logoEquipo1 || partidoJornada?.logoEquipo1 || '',
-      marcador1: r.marcador1,
-      equipo2: r.equipo2,
-      logoEquipo2: r.logoEquipo2 || partidoJornada?.logoEquipo2 || '',
-      marcador2: r.marcador2,
-      comodin: r.comodin,
+   return {
+  equipo1: r.equipo1,
+  logoEquipo1: r.logoEquipo1 || partidoJornada?.logoEquipo1 || '',
+  marcador1: r.marcador1,
+  equipo2: r.equipo2,
+  logoEquipo2: r.logoEquipo2 || partidoJornada?.logoEquipo2 || '',
+  marcador2: r.marcador2,
+  comodin: r.comodin,
 
-      estado: r.estado || partidoJornada?.apiStatus || 'PROGRAMADO',
-      minuto: r.minuto ?? null,
-      fecha: r.fecha || partidoJornada?.apiDate || ''
+  estado: r.estado || 'TC',
+  minuto: r.minuto ?? null,
+  fecha: r.fecha || partidoJornada?.apiDate || '',
 
-    };
+  origen: 'manual',
+  bloqueadoFinal: true,
+  actualizadoEn: new Date()
+};
   });
 
   await ResultadoOficial.findOneAndUpdate(
@@ -2722,6 +2753,35 @@ app.get('/api/resultados-totales', async (req, res) => {
 });
 
 ////////////borrar borrar
+
+app.get('/api/debug/api-football-match/:matchId', requireAdmin, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+
+    const response = await apiFootballCom.get('', {
+      params: {
+        action: 'get_events',
+        match_id: String(matchId),
+        APIkey: process.env.APIFOOTBALL_COM_KEY,
+        timezone: 'America/Costa_Rica'
+      }
+    });
+
+    res.json({
+      matchId,
+      tipoRespuesta: typeof response.data,
+      esArray: Array.isArray(response.data),
+      cantidad: Array.isArray(response.data) ? response.data.length : null,
+      data: response.data
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+      apiError: error.response?.data || null
+    });
+  }
+});
 
 app.get('/debug/trivia-goles/:matchId', async (req, res) => {
   try {

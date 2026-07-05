@@ -116,13 +116,6 @@ function convertirADatetimeLocal(fecha) {
     }
   }
 
-  function convertirADatetimeLocal(fecha) {
-    const d = new Date(fecha);
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 16);
-  }
-
   function existeTrivia(partidoIndex, tipo) {
     return triviasExistentes.some(t =>
       Number(t.partidoIndex) === Number(partidoIndex) && t.tipo === tipo
