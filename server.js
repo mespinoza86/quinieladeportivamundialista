@@ -953,7 +953,6 @@ function obtenerEstadoPartido(fixture, partido) {
   };
 }
 
-
 app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
   try {
     const { jornada } = req.params;
@@ -965,23 +964,18 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
     }
 
     const jornadaDoc = await Jornada.findOne({ nombre: jornada });
-    const oficialExistente = await ResultadoOficial.findOne({ jornada });
-    const resultadosExistentes = oficialExistente ? oficialExistente.resultados : [];
 
     if (!jornadaDoc) {
       return res.status(404).json({ error: 'Jornada no encontrada' });
     }
 
+    const oficialExistente = await ResultadoOficial.findOne({ jornada });
+    const resultadosExistentes = oficialExistente ? oficialExistente.resultados : [];
+
     const resultadosActualizados = [];
 
     for (const partido of jornadaDoc.partidos) {
-
       const existente = buscarOficialCorrespondiente(resultadosExistentes, partido);
-
-      if (existente?.origen === 'manual' || existente?.bloqueadoFinal) {
-        resultadosActualizados.push(existente);
-        continue;
-      }
 
       let fixture = null;
 
@@ -994,31 +988,30 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
       }
 
       if (!fixture) {
-  if (existente) {
-    resultadosActualizados.push(existente);
-  } else {
-    resultadosActualizados.push({
-      equipo1: partido.equipo1,
-      logoEquipo1: partido.logoEquipo1 || '',
-      marcador1: null,
-      equipo2: partido.equipo2,
-      logoEquipo2: partido.logoEquipo2 || '',
-      marcador2: null,
-      comodin: partido.comodin,
+        if (existente) {
+          resultadosActualizados.push(existente);
+        } else {
+          resultadosActualizados.push({
+            equipo1: partido.equipo1,
+            logoEquipo1: partido.logoEquipo1 || '',
+            marcador1: null,
+            equipo2: partido.equipo2,
+            logoEquipo2: partido.logoEquipo2 || '',
+            marcador2: null,
+            comodin: partido.comodin,
 
-      estado: 'PROGRAMADO',
-      minuto: null,
-      fecha: partido.apiDate || '',
+            estado: 'PROGRAMADO',
+            minuto: null,
+            fecha: partido.apiDate || '',
 
-      origen: 'api',
-      bloqueadoFinal: false,
-      actualizadoEn: new Date()
-    });
-  }
+            origen: 'api',
+            bloqueadoFinal: false,
+            actualizadoEn: new Date()
+          });
+        }
 
-  continue;
-}
-
+        continue;
+      }
 
       const marcador90 = obtenerMarcador90Minutos(fixture);
 
@@ -1030,23 +1023,40 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
       const vieneInvertido = home === eq2 && away === eq1;
       const estadoPartido = obtenerEstadoPartido(fixture, partido);
 
-     resultadosActualizados.push({
-  equipo1: partido.equipo1,
-  logoEquipo1: partido.logoEquipo1 || '',
-  marcador1: vieneInvertido ? marcador90.marcador2 : marcador90.marcador1,
-  equipo2: partido.equipo2,
-  logoEquipo2: partido.logoEquipo2 || '',
-  marcador2: vieneInvertido ? marcador90.marcador1 : marcador90.marcador2,
-  comodin: partido.comodin,
+      const resultadoApi = {
+        equipo1: partido.equipo1,
+        logoEquipo1: partido.logoEquipo1 || '',
+        marcador1: vieneInvertido ? marcador90.marcador2 : marcador90.marcador1,
+        equipo2: partido.equipo2,
+        logoEquipo2: partido.logoEquipo2 || '',
+        marcador2: vieneInvertido ? marcador90.marcador1 : marcador90.marcador2,
+        comodin: partido.comodin,
 
-  estado: estadoPartido.estado,
-  minuto: estadoPartido.minuto,
-  fecha: partido.apiDate || '',
+        estado: estadoPartido.estado,
+        minuto: estadoPartido.minuto,
+        fecha: partido.apiDate || '',
 
-  origen: 'api',
-  bloqueadoFinal: estadoPartido.estado === 'TC',
-  actualizadoEn: new Date()
-});
+        origen: 'api',
+        bloqueadoFinal: estadoPartido.estado === 'TC',
+        actualizadoEn: new Date()
+      };
+
+      if (estadoPartido.estado === 'LIVE' || estadoPartido.estado === 'MT') {
+        resultadosActualizados.push(resultadoApi);
+        continue;
+      }
+
+      if (estadoPartido.estado === 'TC' && existente?.origen === 'manual') {
+        resultadosActualizados.push(existente);
+        continue;
+      }
+
+      if (estadoPartido.estado === 'PROGRAMADO' && existente) {
+        resultadosActualizados.push(existente);
+        continue;
+      }
+
+      resultadosActualizados.push(resultadoApi);
     }
 
     await ResultadoOficial.findOneAndUpdate(
