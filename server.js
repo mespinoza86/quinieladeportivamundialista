@@ -1030,44 +1030,6 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
       const vieneInvertido = home === eq2 && away === eq1;
       const estadoPartido = obtenerEstadoPartido(fixture, partido);
 
-      console.log('===== SYNC PARTIDO =====');
-      console.log({
-        horaCR: new Date().toLocaleString('es-CR', {
-          timeZone: 'America/Costa_Rica'
-        }),
-
-        jornada,
-
-        partido: `${partido.equipo1} vs ${partido.equipo2}`,
-
-        apiFixtureId: partido.apiFixtureId,
-
-        apiRaw: {
-          match_status: fixture.match_status,
-          match_live: fixture.match_live,
-
-          homeScore: fixture.match_hometeam_score,
-          awayScore: fixture.match_awayteam_score,
-
-          ftHome: fixture.match_hometeam_ft_score,
-          ftAway: fixture.match_awayteam_ft_score
-        },
-
-        calculadoSistema: {
-          estado: estadoPartido.estado,
-          minuto: estadoPartido.minuto
-        },
-
-        existente: existente ? {
-          marcador1: existente.marcador1,
-          marcador2: existente.marcador2,
-          estado: existente.estado,
-          minuto: existente.minuto,
-          origen: existente.origen
-        } : null
-      });
-      console.log('========================');
-
       const resultadoApi = {
         equipo1: partido.equipo1,
         logoEquipo1: partido.logoEquipo1 || '',
@@ -1086,20 +1048,46 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
         actualizadoEn: new Date()
       };
 
-      console.log('DECISION SYNC:', {
-        partido: `${resultadoApi.equipo1} vs ${resultadoApi.equipo2}`,
-        marcador: `${resultadoApi.marcador1}-${resultadoApi.marcador2}`,
-        estado: resultadoApi.estado,
-        minuto: resultadoApi.minuto,
-        accion:
-          estadoPartido.estado === 'LIVE' || estadoPartido.estado === 'MT'
-            ? 'GUARDAR_API_LIVE'
-            : estadoPartido.estado === 'TC' && existente?.origen === 'manual'
-              ? 'CONSERVAR_MANUAL_TC'
-              : estadoPartido.estado === 'PROGRAMADO' && existente
-                ? 'CONSERVAR_EXISTENTE_PROGRAMADO'
-                : 'GUARDAR_API'
-      });
+      if (estadoPartido.estado === 'LIVE' || estadoPartido.estado === 'MT') {
+        console.log('===== SYNC LIVE =====');
+        console.log({
+          horaCR: new Date().toLocaleString('es-CR', {
+            timeZone: 'America/Costa_Rica'
+          }),
+
+          jornada,
+
+          partido: `${partido.equipo1} vs ${partido.equipo2}`,
+
+          apiFixtureId: partido.apiFixtureId,
+
+          apiRaw: {
+            match_status: fixture.match_status,
+            match_live: fixture.match_live,
+            score: `${fixture.match_hometeam_score}-${fixture.match_awayteam_score}`,
+            ftScore: `${fixture.match_hometeam_ft_score}-${fixture.match_awayteam_ft_score}`
+          },
+
+          calculadoSistema: {
+            estado: estadoPartido.estado,
+            minuto: estadoPartido.minuto
+          },
+
+          existente: existente ? {
+            marcador1: existente.marcador1,
+            marcador2: existente.marcador2,
+            estado: existente.estado,
+            minuto: existente.minuto,
+            origen: existente.origen
+          } : null,
+
+          decision: {
+            marcador: `${resultadoApi.marcador1}-${resultadoApi.marcador2}`,
+            accion: 'GUARDAR_API_LIVE'
+          }
+        });
+        console.log('=====================');
+      }
 
       if (estadoPartido.estado === 'LIVE' || estadoPartido.estado === 'MT') {
         resultadosActualizados.push(resultadoApi);
@@ -1141,7 +1129,6 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
     res.status(500).json({ error: 'Error sincronizando resultados oficiales' });
   }
 });
-
 
 
 app.get('/api/admin/respuestas-trivias-jornada/:jornadaNombre', requireAdmin, async (req, res) => {
