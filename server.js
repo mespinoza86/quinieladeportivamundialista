@@ -879,7 +879,6 @@ function obtenerEstadoVisual(fixture, partido) {
 
 function obtenerEstadoPartido(fixture, partido) {
   const estadoRaw = String(fixture?.match_status || partido?.apiStatus || '').trim();
-  const matchLive = String(fixture?.match_live || '');
 
   const estadoLower = estadoRaw.toLowerCase();
 
@@ -892,6 +891,7 @@ function obtenerEstadoPartido(fixture, partido) {
     'penalties'
   ];
 
+  // Partido terminado
   if (estadosFinalizados.includes(estadoLower)) {
     return {
       estado: 'TC',
@@ -899,6 +899,7 @@ function obtenerEstadoPartido(fixture, partido) {
     };
   }
 
+  // Medio tiempo
   if (
     estadoLower === 'half time' ||
     estadoLower === 'halftime' ||
@@ -910,6 +911,7 @@ function obtenerEstadoPartido(fixture, partido) {
     };
   }
 
+  // Tiempo agregado primer tiempo
   if (/^45\+/.test(estadoRaw)) {
     return {
       estado: 'LIVE',
@@ -917,6 +919,7 @@ function obtenerEstadoPartido(fixture, partido) {
     };
   }
 
+  // Tiempo agregado segundo tiempo
   if (/^90\+/.test(estadoRaw)) {
     return {
       estado: 'LIVE',
@@ -924,7 +927,9 @@ function obtenerEstadoPartido(fixture, partido) {
     };
   }
 
-  if (matchLive === '1' && /^\d+$/.test(estadoRaw)) {
+  // Cualquier minuto numérico significa partido en vivo
+  // Ej: "1", "34", "67", "89"
+  if (/^\d+$/.test(estadoRaw)) {
     const minuto = Number(estadoRaw);
 
     if (minuto >= 90) {
@@ -947,11 +952,13 @@ function obtenerEstadoPartido(fixture, partido) {
     };
   }
 
+  // Todavía no inicia
   return {
     estado: 'PROGRAMADO',
     minuto: null
   };
 }
+
 
 app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
   try {
@@ -1023,6 +1030,44 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
       const vieneInvertido = home === eq2 && away === eq1;
       const estadoPartido = obtenerEstadoPartido(fixture, partido);
 
+      console.log('===== SYNC PARTIDO =====');
+      console.log({
+        horaCR: new Date().toLocaleString('es-CR', {
+          timeZone: 'America/Costa_Rica'
+        }),
+
+        jornada,
+
+        partido: `${partido.equipo1} vs ${partido.equipo2}`,
+
+        apiFixtureId: partido.apiFixtureId,
+
+        apiRaw: {
+          match_status: fixture.match_status,
+          match_live: fixture.match_live,
+
+          homeScore: fixture.match_hometeam_score,
+          awayScore: fixture.match_awayteam_score,
+
+          ftHome: fixture.match_hometeam_ft_score,
+          ftAway: fixture.match_awayteam_ft_score
+        },
+
+        calculadoSistema: {
+          estado: estadoPartido.estado,
+          minuto: estadoPartido.minuto
+        },
+
+        existente: existente ? {
+          marcador1: existente.marcador1,
+          marcador2: existente.marcador2,
+          estado: existente.estado,
+          minuto: existente.minuto,
+          origen: existente.origen
+        } : null
+      });
+      console.log('========================');
+
       const resultadoApi = {
         equipo1: partido.equipo1,
         logoEquipo1: partido.logoEquipo1 || '',
@@ -1040,6 +1085,21 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
         bloqueadoFinal: estadoPartido.estado === 'TC',
         actualizadoEn: new Date()
       };
+
+      console.log('DECISION SYNC:', {
+        partido: `${resultadoApi.equipo1} vs ${resultadoApi.equipo2}`,
+        marcador: `${resultadoApi.marcador1}-${resultadoApi.marcador2}`,
+        estado: resultadoApi.estado,
+        minuto: resultadoApi.minuto,
+        accion:
+          estadoPartido.estado === 'LIVE' || estadoPartido.estado === 'MT'
+            ? 'GUARDAR_API_LIVE'
+            : estadoPartido.estado === 'TC' && existente?.origen === 'manual'
+              ? 'CONSERVAR_MANUAL_TC'
+              : estadoPartido.estado === 'PROGRAMADO' && existente
+                ? 'CONSERVAR_EXISTENTE_PROGRAMADO'
+                : 'GUARDAR_API'
+      });
 
       if (estadoPartido.estado === 'LIVE' || estadoPartido.estado === 'MT') {
         resultadosActualizados.push(resultadoApi);
@@ -2763,6 +2823,18 @@ app.get('/api/resultados-totales', async (req, res) => {
 });
 
 ////////////borrar borrar
+
+app.get('/api/debug/estado-partido/:status', requireAdmin, (req, res) => {
+  const fixture = {
+    match_status: req.params.status,
+    match_live: req.query.live || ''
+  };
+
+  res.json({
+    fixture,
+    resultado: obtenerEstadoPartido(fixture, {})
+  });
+});
 
 app.get('/api/debug/api-football-match/:matchId', requireAdmin, async (req, res) => {
   try {
