@@ -727,7 +727,18 @@ function obtenerMarcador90Minutos(fixture) {
 }
 */
 
-function obtenerMarcador90Minutos(fixture) {
+function obtenerMarcador90Minutos(fixture, estadoPartido = null) {
+  const estado = estadoPartido?.estado || '';
+
+  // Mientras el partido está en vivo o en medio tiempo,
+  // usamos el marcador vivo directo del API.
+  if (estado === 'LIVE' || estado === 'MT') {
+    return {
+      marcador1: obtenerNumeroSeguro(fixture.match_hometeam_score),
+      marcador2: obtenerNumeroSeguro(fixture.match_awayteam_score)
+    };
+  }
+
   const ftHome = obtenerNumeroSeguro(fixture.match_hometeam_ft_score);
   const ftAway = obtenerNumeroSeguro(fixture.match_awayteam_ft_score);
 
@@ -740,12 +751,10 @@ function obtenerMarcador90Minutos(fixture) {
   const golesRegulares = goles.filter(gol => {
     const periodo = String(gol.score_info_time || '').toLowerCase();
     const info = String(gol.info || '').toLowerCase();
-    
-    
+
     if (periodo === 'penalty') return false;
     if (periodo.includes('extra time')) return false;
     if (info.includes('penalty')) return false;
-
 
     return gol.score && /^\d+\s*-\s*\d+$/.test(gol.score);
   });
@@ -765,7 +774,6 @@ function obtenerMarcador90Minutos(fixture) {
     marcador2: obtenerNumeroSeguro(fixture.match_awayteam_score)
   };
 }
-
 
 function normalizarEquipo(nombre) {
   return (nombre || '')
@@ -1020,8 +1028,6 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
         continue;
       }
 
-      const marcador90 = obtenerMarcador90Minutos(fixture);
-
       const home = normalizarEquipo(fixture.match_hometeam_name);
       const away = normalizarEquipo(fixture.match_awayteam_name);
       const eq1 = normalizarEquipo(partido.equipo1);
@@ -1029,6 +1035,7 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
 
       const vieneInvertido = home === eq2 && away === eq1;
       const estadoPartido = obtenerEstadoPartido(fixture, partido);
+      const marcador90 = obtenerMarcador90Minutos(fixture, estadoPartido);
 
       const resultadoApi = {
         equipo1: partido.equipo1,
@@ -1129,7 +1136,6 @@ app.post('/api/sync-resultados-oficiales/:jornada', async (req, res) => {
     res.status(500).json({ error: 'Error sincronizando resultados oficiales' });
   }
 });
-
 
 app.get('/api/admin/respuestas-trivias-jornada/:jornadaNombre', requireAdmin, async (req, res) => {
   try {
