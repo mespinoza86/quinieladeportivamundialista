@@ -145,6 +145,20 @@ h1 {
   color: rgba(4, 19, 10, 0.72);
 }
 
+.action-card.trivia-action-card,
+.action-card.trivia-action-card:hover {
+  background: #ffffff;
+  color: #222222;
+}
+
+.action-card.trivia-action-card p {
+  color: #555555;
+}
+
+.action-card.trivia-action-card .icon {
+  background: #f1f5f9;
+}
+
 /* Layout general para las otras páginas */
 header {
   background: transparent;

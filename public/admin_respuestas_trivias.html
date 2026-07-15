@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Respuestas de Trivias</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+  <script src="/js/admin_respuestas_trivias.js" defer></script>
+</head>
+<body class="app-body">
+  <main class="mobile-shell wide-shell">
+    <section class="hero-card">
+      <div class="hero-top">
+        <div>
+          <p class="eyebrow">Modo administrador</p>
+          <h1>Respuestas de Trivias</h1>
+        </div>
+        <div class="app-logo">&#9998;</div>
+      </div>
+      <p class="hero-text">Agrega o modifica respuestas de cualquier jugador, aunque la trivia ya haya cerrado.</p>
+    </section>
+
+    <section class="app-panel">
+      <label class="field-label" for="jornadaSelect">Jornada</label>
+      <select id="jornadaSelect">
+        <option value="">Seleccione jornada</option>
+      </select>
+
+      <label class="field-label" for="jugadorSelect">Jugador</label>
+      <select id="jugadorSelect" disabled>
+        <option value="">Seleccione jugador</option>
+      </select>
+
+      <div id="respuestasContainer" class="trivias-container">
+        <div class="resultados-mensaje">Seleccione una jornada y un jugador.</div>
+      </div>
+
+      <div class="button-stack">
+        <button id="guardarBtn" type="button" disabled>Guardar Respuestas</button>
+        <button class="ghost-button" type="button" onclick="window.location.href='adminmode.html'">Volver</button>
+      </div>
+      <p id="mensaje" class="form-message" aria-live="polite"></p>
+    </section>
+  </main>
+</body>
+</html>

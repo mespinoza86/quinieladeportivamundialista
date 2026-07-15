@@ -244,6 +244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const resp = await fetch(`/api/jugadores/${encodeURIComponent(jugador)}/verificar-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ password: passwordIngresada })
       });
 
@@ -429,10 +430,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     const res = await fetch('/api/respuestas-trivia', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({ jugador, respuestas })
     });
 
     const data = await res.json();
+
+    if (res.status === 401) {
+      jugadorValidado = null;
+      jugadorSelect.value = '';
+      limpiarRespuestas();
+      alert(data.error || 'La sesión del jugador venció. Selecciónelo y valide nuevamente su contraseña.');
+      return;
+    }
 
     if (!res.ok) {
       alert(data.error || 'Error guardando trivias.');

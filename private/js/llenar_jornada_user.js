@@ -73,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const resp = await fetch(`/api/jugadores/${encodeURIComponent(jugador)}/verificar-password`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: 'same-origin',
                 body: JSON.stringify({ password: passwordIngresada })
             });
 
@@ -598,10 +599,18 @@ const marcador2 = inputs[1].value.trim();
     const res = await fetch('/api/resultados', {
     method: 'POST',
     headers: { "Content-Type": "application/json" },
+    credentials: 'same-origin',
     body: JSON.stringify({ jugador, jornada, pronosticos })
 });
 
 const data = await res.json();
+
+if (res.status === 401) {
+    combo.value = '';
+    combo.dispatchEvent(new Event('change'));
+    alert(data.error || "La sesión del jugador venció. Selecciónelo y valide nuevamente su contraseña.");
+    return;
+}
 
 if (!res.ok || !data.success) {
     alert(data.error || "No se pudieron guardar los resultados.");

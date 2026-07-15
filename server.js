@@ -13,6 +13,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SALT_ROUNDS = 10;
 
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 /* ================= Middleware ================= */
 
 /* ================= Middleware ================= */
@@ -59,6 +63,20 @@ function requireAdmin(req, res, next) {
   return res.redirect('/login.html');
 }
 
+function requireJugador(req, res, next) {
+  const jugadorSolicitado = String(req.body?.jugador || req.params?.jugador || '').trim();
+  const jugadorAutenticado = String(req.session?.jugadorAutenticado || '').trim();
+
+  if (jugadorSolicitado && jugadorAutenticado === jugadorSolicitado) {
+    return next();
+  }
+
+  return res.status(401).json({
+    success: false,
+    error: 'Debe validar nuevamente la contraseña del jugador.'
+  });
+}
+
 const paginasAdmin = [
   '/jugadores.html',
   '/jornadas.html',
@@ -69,6 +87,7 @@ const paginasAdmin = [
   '/enviarresultados.html',
   '/copiarresultadojugador.html',
   '/admin_trivias.html',
+  '/admin_respuestas_trivias.html',
   '/enviarresultadostrivias.html',
   '/enviarresultadospartido.html',
   '/enviarresultadostriviaspartido.html',
@@ -460,6 +479,7 @@ app.post('/api/jugadores/:nombre/verificar-password', async (req, res) => {
   const match = await bcrypt.compare(password, jugador.password);
 
   if (match) {
+    req.session.jugadorAutenticado = jugador.nombre;
     return res.json({ success: true });
   }
 
@@ -1164,6 +1184,112 @@ app.get('/api/admin/respuestas-trivias-jornada/:jornadaNombre', requireAdmin, as
   }
 });
 
+app.get('/api/admin/respuestas-trivias/:jornadaNombre/:jugador', requireAdmin, async (req, res) => {
+  try {
+    const { jornadaNombre, jugador } = req.params;
+
+    const jugadorDoc = await Jugador.findOne({ nombre: jugador });
+    if (!jugadorDoc) {
+      return res.status(404).json({ error: 'Jugador no encontrado.' });
+    }
+
+    const trivias = await Trivia.find({
+      jornadaNombre,
+      activa: true
+    }).sort({ partidoIndex: 1, tipo: 1 });
+
+    const triviaIds = trivias.map(t => t._id.toString());
+    const respuestas = await RespuestaTrivia.find({
+      jugador,
+      triviaId: { $in: triviaIds }
+    });
+
+    const respuestasPorTrivia = new Map(
+      respuestas.map(r => [String(r.triviaId), r])
+    );
+
+    res.json({
+      jornadaNombre,
+      jugador,
+      trivias: trivias.map(trivia => {
+        const respuesta = respuestasPorTrivia.get(String(trivia._id));
+        return {
+          _id: trivia._id,
+          partidoIndex: trivia.partidoIndex,
+          equipo1: trivia.equipo1,
+          equipo2: trivia.equipo2,
+          pregunta: trivia.pregunta,
+          opciones: trivia.opciones,
+          puntosTrivia: trivia.puntos || 1,
+          cerrada: triviaCerrada(trivia),
+          resuelta: trivia.resuelta,
+          respuestaCorrecta: trivia.respuestaCorrecta || '',
+          respuesta: respuesta?.respuesta || '',
+          puntosJugador: respuesta?.puntos || 0
+        };
+      })
+    });
+  } catch (error) {
+    console.error('Error obteniendo respuestas de jugador para admin:', error);
+    res.status(500).json({ error: 'Error obteniendo respuestas del jugador.' });
+  }
+});
+
+app.put('/api/admin/respuestas-trivias/:jornadaNombre/:jugador', requireAdmin, async (req, res) => {
+  try {
+    const { jornadaNombre, jugador } = req.params;
+    const { respuestas } = req.body;
+
+    if (!Array.isArray(respuestas)) {
+      return res.status(400).json({ error: 'Las respuestas son inválidas.' });
+    }
+
+    const jugadorDoc = await Jugador.findOne({ nombre: jugador });
+    if (!jugadorDoc) {
+      return res.status(404).json({ error: 'Jugador no encontrado.' });
+    }
+
+    const trivias = await Trivia.find({ jornadaNombre, activa: true });
+    const triviasPorId = new Map(trivias.map(t => [String(t._id), t]));
+
+    for (const item of respuestas) {
+      const trivia = triviasPorId.get(String(item.triviaId));
+      if (!trivia) {
+        return res.status(400).json({ error: 'Una trivia no pertenece a la jornada seleccionada.' });
+      }
+
+      const respuesta = String(item.respuesta || '').trim();
+
+      if (!respuesta) {
+        await RespuestaTrivia.deleteOne({ jugador, triviaId: String(trivia._id) });
+        continue;
+      }
+
+      if (!trivia.opciones.includes(respuesta)) {
+        return res.status(400).json({ error: `Respuesta inválida para: ${trivia.pregunta}` });
+      }
+
+      const puntos = trivia.resuelta && trivia.respuestaCorrecta === respuesta
+        ? (trivia.puntos || 1)
+        : 0;
+
+      await RespuestaTrivia.findOneAndUpdate(
+        { jugador, triviaId: String(trivia._id) },
+        { jugador, triviaId: String(trivia._id), respuesta, puntos, fechaRespuesta: new Date() },
+        { upsert: true, new: true }
+      );
+    }
+
+    res.json({
+      success: true,
+      mensaje: 'Respuestas del jugador actualizadas correctamente.'
+    });
+  } catch (error) {
+    console.error('Error actualizando respuestas de trivia desde admin:', error);
+    res.status(500).json({ error: 'Error actualizando respuestas del jugador.' });
+  }
+});
+
 /* Code added to modify the jorney per match*/
 
 function parseFechaPartido(apiDate) {
@@ -1242,7 +1368,7 @@ function partidoYaInicio(partido, oficial = null) {
   return fecha <= new Date();
 }
 
-app.post('/api/resultados', async (req, res) => {
+app.post('/api/resultados', requireJugador, async (req, res) => {
   try {
     const { jugador, jornada, pronosticos } = req.body;
 
@@ -1928,7 +2054,7 @@ app.get('/api/respuestas-trivia/:jugador/:jornadaNombre', async (req, res) => {
   }
 });
 
-app.post('/api/respuestas-trivia', async (req, res) => {
+app.post('/api/respuestas-trivia', requireJugador, async (req, res) => {
   try {
     const { jugador, respuestas } = req.body;
 
